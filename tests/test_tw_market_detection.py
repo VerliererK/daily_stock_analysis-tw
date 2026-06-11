@@ -199,5 +199,55 @@ class TestDailyRoutingFilter(unittest.TestCase):
         self.assertEqual(kept_names, {'FinMindFetcher', 'YfinanceFetcher'})
 
 
+class TestTwStockNamePrefersFinMind(unittest.TestCase):
+    """台股名称应优先取 FinMind 中文名，而非实时行情的英文名。"""
+
+    def test_get_stock_name_uses_finmind_first(self):
+        from data_provider.base import DataFetcherManager
+
+        finmind = MagicMock()
+        finmind.name = 'FinMindFetcher'
+        finmind.priority = 1
+        finmind.get_stock_name.return_value = '台積電'
+
+        yfinance = MagicMock()
+        yfinance.name = 'YfinanceFetcher'
+        yfinance.priority = 4
+
+        mgr = DataFetcherManager(fetchers=[finmind, yfinance])
+        # 不应触发实时行情（其会返回 Yahoo 英文名）
+        mgr.get_realtime_quote = MagicMock(
+            side_effect=AssertionError('realtime quote should not be queried for TW names'))
+
+        name = mgr.get_stock_name('TW2330')
+        self.assertEqual(name, '台積電')
+        finmind.get_stock_name.assert_called_once_with('TW2330')
+
+    def test_yfinance_tw_realtime_quote_has_empty_name(self):
+        """yfinance 台股行情不应携带 Yahoo 英文名，避免覆盖 FinMind 中文名。"""
+        from data_provider.yfinance_fetcher import YfinanceFetcher
+
+        fast_info = MagicMock()
+        fast_info.lastPrice = 855.0
+        fast_info.previousClose = 850.0
+        fast_info.open = 851.0
+        fast_info.dayHigh = 860.0
+        fast_info.dayLow = 845.0
+        fast_info.lastVolume = 20000
+        fast_info.marketCap = None
+
+        ticker = MagicMock()
+        ticker.fast_info = fast_info
+        yf = MagicMock()
+        yf.Ticker.return_value = ticker
+
+        fetcher = YfinanceFetcher()
+        quote = fetcher._get_tw_realtime_quote(yf, 'TW2330')
+        self.assertIsNotNone(quote)
+        self.assertEqual(quote.code, 'TW2330')
+        self.assertAlmostEqual(quote.price, 855.0)
+        self.assertEqual(quote.name, '')
+
+
 if __name__ == '__main__':
     unittest.main()

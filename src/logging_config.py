@@ -45,6 +45,10 @@ class RelativePathFormatter(logging.Formatter):
         except ValueError:
             # 如果无法转换为相对路径，保持原样
             pass
+        except Exception:
+            # 解释器关闭阶段 pathlib 的延迟 import 可能失败（如第三方库 __del__
+            # 触发的日志），此时保持原始路径，避免 logging 打印 "--- Logging error ---"
+            pass
         return super().format(record)
 
 
@@ -55,6 +59,7 @@ DEFAULT_QUIET_LOGGERS = [
     'sqlalchemy',
     'google',
     'httpx',
+    'httpcore',
 ]
 
 LITELLM_LOGGERS = [

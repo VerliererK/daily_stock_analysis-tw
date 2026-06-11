@@ -1933,6 +1933,11 @@ class DataFetcherManager:
         # Normalize code (strip SH/SZ prefix etc.)
         stock_code = normalize_stock_code(stock_code)
 
+        # 台股暂无筹码分布数据源（FinMind 筹码面为后续迭代），直接降级，
+        # 避免拿 TW 代码去打 A 股专用接口（如 ak.stock_cyq_em）
+        if _market_tag(stock_code) == "tw":
+            return None
+
         from .realtime_types import get_chip_circuit_breaker
         from src.config import get_config
 
@@ -2017,6 +2022,20 @@ class DataFetcherManager:
         index_name = get_index_stock_name(stock_code)
         if is_meaningful_stock_name(index_name, stock_code):
             return self._cache_stock_name(stock_code, index_name) or index_name
+
+        # 台股：优先使用 FinMind 静态名称（中文，免 token 可用），
+        # 避免实时行情 fallback 到 Yfinance 时英文名占用缓存
+        if _market_tag(stock_code) == "tw":
+            finmind = self._get_fetcher_by_name("FinMindFetcher", capability="stock_name")
+            if finmind is not None and hasattr(finmind, 'get_stock_name'):
+                try:
+                    name = self._call_fetcher_method(finmind, 'get_stock_name', stock_code)
+                    if is_meaningful_stock_name(name, stock_code):
+                        self._cache_stock_name(stock_code, name)
+                        logger.info(f"[股票名称] 从 FinMindFetcher 获取: {stock_code} -> {name}")
+                        return name
+                except Exception as e:
+                    logger.debug(f"[股票名称] FinMindFetcher 获取失败: {e}")
 
         # 2. 尝试从实时行情中获取（最快，可按需禁用）
         if allow_realtime:

@@ -745,16 +745,12 @@ class YfinanceFetcher(BaseFetcher):
                     if high is not None and low is not None:
                         amplitude = ((high - low) / prev_close) * 100
 
-                try:
-                    info_name = ticker.info.get('shortName', '') or ticker.info.get('longName', '') or ''
-                    name = info_name if is_meaningful_stock_name(info_name, tw_symbol) else ''
-                except Exception:
-                    name = ''
-
+                # 台股不带 Yahoo 英文名：中文名称由 FinMind（TaiwanStockInfo）提供，
+                # 留空可避免 pipeline 的实时行情名称覆盖逻辑把中文名换成英文名
                 self._tw_symbol_cache[cache_key] = tw_symbol
                 quote = UnifiedRealtimeQuote(
                     code=code_upper,
-                    name=name,
+                    name="",
                     source=RealtimeSource.FALLBACK,
                     price=price,
                     change_pct=round(change_pct, 2) if change_pct is not None else None,

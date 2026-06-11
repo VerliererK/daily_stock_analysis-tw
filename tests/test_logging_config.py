@@ -101,3 +101,31 @@ def test_invalid_litellm_log_level_falls_back_to_warning(tmp_path, monkeypatch):
     assert "invalid level warning should remain" in debug_log_text
     assert "LITELLM_LOG_LEVEL" in debug_log_text
     assert "已回退为 WARNING" in debug_log_text
+
+
+def test_relative_path_formatter_survives_shutdown_time_import_error():
+    """解释器关闭阶段 pathlib 延迟 import 失败时，formatter 不应抛错（避免 Logging error 噪音）。"""
+    from unittest.mock import patch
+
+    import src.logging_config as lc
+
+    fmt = lc.RelativePathFormatter(lc.LOG_FORMAT, lc.LOG_DATE_FORMAT, relative_to="/tmp")
+    record = logging.LogRecord(
+        "httpcore", logging.DEBUG, "/x/httpcore/_trace.py", 47, "close.started", (), None
+    )
+    with patch.object(lc, "Path", side_effect=ImportError("sys.meta_path is None")):
+        formatted = fmt.format(record)
+    assert "close.started" in formatted
+
+
+def test_httpcore_debug_is_quiet_by_default(tmp_path):
+    """httpcore（httpx 底层）debug 噪音默认应被降级，不进入 debug 日志。"""
+    setup_logging(log_prefix="stock_analysis", log_dir=str(tmp_path), debug=False)
+
+    logging.getLogger("httpcore").debug("httpcore debug should be filtered")
+    logging.getLogger("httpcore").warning("httpcore warning should remain")
+
+    debug_log_text = _read_debug_log(tmp_path)
+
+    assert "httpcore debug should be filtered" not in debug_log_text
+    assert "httpcore warning should remain" in debug_log_text
