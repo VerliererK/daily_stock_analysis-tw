@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 <!-- 新条目格式：- [类型] 描述（类型取值：新功能/改进/修复/文档/测试/chore）-->
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
 - [修复] 桌面发布打包改用冻结可执行文件运行时探针校验 `alphasift.dsa_adapter`，避免 macOS PyInstaller 将模块内嵌进可执行文件时被文件系统/zip 扫描误判为缺失。
+- [新功能] 新增台股（TW）市场支持：FinMind 为主数据源（日线/实时快照/股票名称，免 token 可用，可配 `FINMIND_TOKEN` 提升限额）、Yfinance `.TW`/`.TWO` 兜底；代码约定 `tw2330` / `2330.TW` / 裸 4 位数字视为台股，5 位纯数字维持港股判定；同步扩展市场判别、交易日历（XTAI）、台股 prompt 守则与持仓/决策信号 `market` 枚举。
 
 ## [3.21.0] - 2026-06-07
 

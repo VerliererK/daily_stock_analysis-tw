@@ -29,6 +29,7 @@ from src.data.stock_mapping import STOCK_NAME_MAP, is_meaningful_stock_name
 from src.services.run_diagnostics import record_provider_run
 from .fundamental_adapter import AkshareFundamentalAdapter
 from .yfinance_fundamental_adapter import YfinanceFundamentalAdapter
+from .tw_market import canonical_tw_code, is_tw_stock_code
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -90,6 +91,12 @@ def normalize_stock_code(stock_code: str) -> str:
     """
     code = stock_code.strip()
     upper = code.upper()
+
+    # Normalize Taiwan stock code to canonical TW prefix form
+    # (e.g. tw2330 / 2330.TW / 6488.TWO / bare 4-digit 2330 -> TW2330)
+    tw_canonical = canonical_tw_code(upper)
+    if tw_canonical:
+        return tw_canonical
 
     # Normalize HK prefix to a canonical 5-digit form (e.g. hk1810 -> HK01810)
     if upper.startswith('HK') and not upper.startswith('HK.'):
@@ -204,11 +211,13 @@ def _is_meaningful_chip_distribution(chip: Any) -> bool:
 
 
 def _market_tag(code: str) -> str:
-    """返回市场标签: cn/us/hk."""
+    """返回市场标签: cn/us/hk/tw."""
     if _is_us_market(code):
         return "us"
     if _is_hk_market(code):
         return "hk"
+    if is_tw_stock_code(code):
+        return "tw"
     return "cn"
 
 
@@ -569,10 +578,11 @@ class DataFetcherManager:
         "TushareFetcher": {"cn", "hk"},
         "PytdxFetcher": {"cn"},
         "BaostockFetcher": {"cn"},
-        "YfinanceFetcher": {"cn", "hk", "us"},
+        "YfinanceFetcher": {"cn", "hk", "us", "tw"},
         "LongbridgeFetcher": {"hk", "us"},
         "FinnhubFetcher": {"us"},
         "AlphaVantageFetcher": {"us"},
+        "FinMindFetcher": {"tw"},
     }
 
     def __init__(self, fetchers: Optional[List[BaseFetcher]] = None):
@@ -695,7 +705,7 @@ class DataFetcherManager:
         market: str,
     ) -> List[BaseFetcher]:
         """Skip built-in daily fetchers that are known not to support a market."""
-        if market not in {"cn", "hk", "us"}:
+        if market not in {"cn", "hk", "us", "tw"}:
             return fetchers
 
         kept: List[BaseFetcher] = []
@@ -1058,6 +1068,7 @@ class DataFetcherManager:
         from .baostock_fetcher import BaostockFetcher
         from .yfinance_fetcher import YfinanceFetcher
         from .longbridge_fetcher import LongbridgeFetcher
+        from .finmind_fetcher import FinMindFetcher
         config = get_config()
         # 创建所有数据源实例（优先级在各 Fetcher 的 __init__ 中确定）
         efinance = EfinanceFetcher()
@@ -1065,6 +1076,7 @@ class DataFetcherManager:
         pytdx = PytdxFetcher()      # 通达信数据源（可配 PYTDX_HOST/PYTDX_PORT）
         baostock = BaostockFetcher()
         yfinance = YfinanceFetcher()
+        finmind = FinMindFetcher()  # 台股数据源（免 token 可用，FINMIND_TOKEN 提升限额）
         optional_fetchers: List[BaseFetcher] = []
 
         tushare_token = (getattr(config, "tushare_token", None) or "").strip()
@@ -1101,6 +1113,7 @@ class DataFetcherManager:
                 pytdx,
                 baostock,
                 yfinance,
+                finmind,
                 *optional_fetchers,
             ]
 
@@ -1165,13 +1178,23 @@ class DataFetcherManager:
         is_us_index = is_us_index_code(stock_code)
         is_us = is_us_index or is_us_stock_code(stock_code)
         is_hk = (not is_us) and _is_hk_market(stock_code)
+        is_tw = (not is_us) and (not is_hk) and is_tw_stock_code(stock_code)
         if is_hk:
             fetchers = self._filter_daily_fetchers_for_market(fetchers, "hk")
+        elif is_tw:
+            # 台股：仅保留支持台股日线的数据源（FinMind 优先，Yfinance 兜底）
+            fetchers = self._filter_daily_fetchers_for_market(fetchers, "tw")
         fetchers = self._filter_fetchers_by_capability(fetchers, capability="daily_data")
         total_fetchers = len(fetchers)
 
         if total_fetchers == 0:
-            market_label = "美股指数" if is_us_index else "美股" if is_us else "港股" if is_hk else "A股"
+            market_label = (
+                "美股指数" if is_us_index
+                else "美股" if is_us
+                else "港股" if is_hk
+                else "台股" if is_tw
+                else "A股"
+            )
             error_summary = f"{market_label} {stock_code} 获取失败:\n暂无可用数据源"
             logger.error(f"[数据源终止] {stock_code} 获取失败: {error_summary}")
             raise DataFetchError(error_summary)
@@ -1613,7 +1636,28 @@ class DataFetcherManager:
             if log_final_failure:
                 logger.info(f"[实时行情] {market_label} {stock_code} 无可用数据源")
             return None
-        
+
+        # ----------------------------------------------------------
+        # 台股 — FinMind 首选, Yfinance 补充/兜底
+        # ----------------------------------------------------------
+        if is_tw_stock_code(stock_code):
+            primary_src, secondary_src = "FinMindFetcher", "YfinanceFetcher"
+            primary_token = self._realtime_fetcher_token(primary_src)
+            primary_quote = self._try_fetcher_quote(stock_code, primary_src)
+            fallback_from = primary_token if primary_quote is None else None
+            if primary_quote is not None:
+                logger.info(f"[实时行情] 台股 {stock_code} 成功获取 (来源: {primary_src})")
+            primary_quote = self._supplement_quote(stock_code, primary_quote, secondary_src)
+            if primary_quote is not None:
+                return self._enrich_realtime_quote(
+                    primary_quote,
+                    fallback_from=fallback_from,
+                    realtime_cache_ttl=getattr(config, "realtime_cache_ttl", None),
+                )
+            if log_final_failure:
+                logger.info(f"[实时行情] 台股 {stock_code} 无可用数据源")
+            return None
+
         # 获取配置的数据源优先级
         source_priority = [
             source.strip().lower()

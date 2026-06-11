@@ -17,7 +17,7 @@ def detect_market(stock_code: Optional[str]) -> str:
     """Detect market from stock code.
 
     Returns:
-        One of 'cn', 'hk', 'us', or 'cn' as fallback.
+        One of 'cn', 'hk', 'us', 'tw', or 'cn' as fallback.
     """
     if not stock_code:
         return "cn"
@@ -33,6 +33,15 @@ def detect_market(stock_code: Optional[str]) -> str:
     # 5-digit pure numbers are HK (A-shares are 6-digit)
     if code.isdigit() and len(code) == 5:
         return "hk"
+
+    # TW stocks: TW2330, 2330.TW, 6488.TWO, or bare 4-digit pure numbers
+    # (kept in sync with data_provider/tw_market.py)
+    if re.match(r'^TW\d{4,6}[A-Z]{0,2}$', code):
+        return "tw"
+    if re.match(r'^\d{4,6}[A-Z]{0,2}\.TWO?$', code):
+        return "tw"
+    if code.isdigit() and len(code) == 4:
+        return "tw"
 
     # US stocks: 1-5 uppercase letters (AAPL, TSLA, GOOGL)
     # Also handles suffixed forms like BRK.B
@@ -57,6 +66,10 @@ _MARKET_ROLES = {
     "us": {
         "zh": "美股",
         "en": "US stock",
+    },
+    "tw": {
+        "zh": "台股",
+        "en": "Taiwan stock",
     },
 }
 
@@ -89,6 +102,18 @@ _MARKET_GUIDELINES = {
         "en": (
             "- This analysis covers a **US stock** (listed on NYSE/NASDAQ).\n"
             "- US stocks have no daily price limits (but have circuit breakers), allow T+0 and pre/after-market trading. Consider USD FX, Fed policy, and SEC regulations."
+        ),
+    },
+    "tw": {
+        "zh": (
+            "- 本次分析对象为 **台股**（台湾证券交易所/柜买中心上市柜股票）。\n"
+            "- 台股有 ±10% 涨跌幅限制，普通交易为 T+2 交割；现股当冲需符合资格且非所有标的开放。\n"
+            "- 需关注台币汇率、外资买卖超动向、电子权值股（半导体）集中度，以及注意/处置股票制度对流动性的影响。"
+        ),
+        "en": (
+            "- This analysis covers a **Taiwan stock** (listed on TWSE/TPEX).\n"
+            "- Taiwan stocks have a ±10% daily price limit and T+2 settlement; day trading requires eligibility and is not available for all tickers.\n"
+            "- Consider TWD FX, foreign institutional net buy/sell flows, the heavy concentration in semiconductor large-caps, and the disposition-stock mechanism's impact on liquidity."
         ),
     },
 }

@@ -2719,7 +2719,8 @@
             "enum": [
               "cn",
               "hk",
-              "us"
+              "us",
+              "tw"
             ],
             "title": "Market"
           },

@@ -89,6 +89,9 @@ class TestFetcherSourceOptimization(unittest.TestCase):
             "data_provider.yfinance_fetcher.YfinanceFetcher",
             return_value=_StubFetcher("YfinanceFetcher", 4),
         ), patch(
+            "data_provider.finmind_fetcher.FinMindFetcher",
+            return_value=_StubFetcher("FinMindFetcher", 1),
+        ), patch(
             "data_provider.tushare_fetcher.TushareFetcher",
             return_value=_StubFetcher("TushareFetcher", -1),
         ) as mock_tushare, patch(
@@ -103,6 +106,7 @@ class TestFetcherSourceOptimization(unittest.TestCase):
             [
                 "EfinanceFetcher",
                 "AkshareFetcher",
+                "FinMindFetcher",
                 "PytdxFetcher",
                 "BaostockFetcher",
                 "YfinanceFetcher",

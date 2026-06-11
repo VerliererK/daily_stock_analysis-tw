@@ -17,8 +17,10 @@ class TestIsCodeLike:
     def test_plain_5_digit(self):
         assert is_code_like("00700") is True
 
-    def test_4_digit_rejected(self):
-        assert is_code_like("6001") is False
+    def test_4_digit_is_tw_code(self):
+        # 本 fork 约定：裸 4 位数字视为台股代码
+        assert is_code_like("6001") is True
+        assert is_code_like("2330") is True
 
     # --- Suffix format ---
     def test_suffix_sh(self):

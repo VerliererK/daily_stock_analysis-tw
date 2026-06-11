@@ -9,6 +9,7 @@ import re
 from typing import Optional
 
 from data_provider.base import is_bse_code
+from data_provider.tw_market import canonical_tw_code
 
 
 # Known exchange prefixes (case-insensitive) and the digit lengths they accept.
@@ -60,11 +61,14 @@ def _strip_exchange_suffix(text: str) -> Optional[str]:
 
 
 def is_code_like(value: str) -> bool:
-    """Check if string looks like a stock code (5-6 digits, 1-5 letters, or prefixed code)."""
+    """Check if string looks like a stock code (4-6 digits, 1-5 letters, or prefixed code)."""
     text = value.strip().upper()
     if not text:
         return False
     if text.isdigit() and len(text) in (5, 6):
+        return True
+    # 台股：TW2330 / 2330.TW / 6488.TWO / 裸 4 位数字
+    if canonical_tw_code(text) is not None:
         return True
     if _strip_exchange_suffix(text) is not None:
         return True
@@ -84,12 +88,17 @@ def normalize_code(raw: str) -> Optional[str]:
     - Suffix format: 600519.SH, 600519.SZ, 920493.BJ, 00700.HK
     - Prefix format: SH600519, SZ000001, BJ920493, HK00700 (case-insensitive)
     - US ticker symbols: AAPL, TSLA
+    - TW codes: 2330, tw2330, 2330.TW, 6488.TWO -> canonical TW2330 form
     """
     text = raw.strip().upper()
     if not text:
         return None
     if text.isdigit() and len(text) in (5, 6):
         return text
+    # 台股 canonical 形式（5 位纯数字已在上方按港股/A股处理，台股 5 位 ETF 需带 TW 前缀/后缀）
+    tw_code = canonical_tw_code(text)
+    if tw_code is not None:
+        return tw_code
     if re.match(r"^[A-Z]{1,5}(?:\.(?:US|[A-Z]))?$", text):
         return text
     stripped_suffix = _strip_exchange_suffix(text)
