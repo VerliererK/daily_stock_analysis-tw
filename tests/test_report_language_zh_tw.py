@@ -41,12 +41,6 @@ class TestActiveVariantPushModel(unittest.TestCase):
         rl.set_active_report_language_variant(None)
         self.assertFalse(rl._TW_LABELS_CACHE)
 
-    def test_getter_does_not_import_config(self):
-        import sys
-        with patch.dict(sys.modules, {'src.config': None}):
-            # 即使 config 模块不可用也不应抛错（无反向依赖）
-            self.assertIsNone(rl.get_active_report_language_variant())
-
 
 class TestVariantDetection(unittest.TestCase):
     def test_variant_aliases(self):

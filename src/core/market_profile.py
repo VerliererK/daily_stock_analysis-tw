@@ -66,6 +66,19 @@ HK_PROFILE = MarketProfile(
     has_sector_rankings=False,
 )
 
+TW_PROFILE = MarketProfile(
+    region="tw",
+    mood_index_code="TWII",
+    news_queries=[
+        "台股 大盤 收盤",
+        "台股 盤勢 分析",
+        "加權指數 外資",
+    ],
+    prompt_index_hint="分析加权指数、柜买指数走势特点，关注外资动向、台币汇率与电子权值股（半导体）对大盘的影响",
+    has_market_stats=False,
+    has_sector_rankings=False,
+)
+
 
 def get_profile(region: str) -> MarketProfile:
     """根据 region 返回对应的 MarketProfile"""
@@ -73,4 +86,6 @@ def get_profile(region: str) -> MarketProfile:
         return US_PROFILE
     if region == "hk":
         return HK_PROFILE
+    if region == "tw":
+        return TW_PROFILE
     return CN_PROFILE

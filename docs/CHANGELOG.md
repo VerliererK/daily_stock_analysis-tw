@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [新功能] `REPORT_LANGUAGE=zh-tw` 支持台湾繁体中文报告：LLM 经 prompt 指示原生输出台湾繁体与台湾金融用语（本益比、殖利率、法人买卖超），模板文案经 OpenCC s2twp 兜底转换（臺→台 归一），operation_advice/trend 等语义解析新增繁体词别名；内部基础语言仍为 zh，对 zh/en 用户零行为变化。
 - [修复] Docker 镜像运行用户 UID/GID 改为可配置 build arg（默认 1000 不变），compose 设为 1001 对齐宿主机用户，避免容器 entrypoint 权限修复与宿主机本地开发互相抢占 data/logs/reports 挂载目录所有权。
 - [新功能] 台股个股分析注入 FinMind 筹码面数据：三大法人买卖超（外资/投信/自营商，当日与近5日累计）、融资融券余额与增减、外资持股比率，作为 LLM 分析上下文的筹码参考过滤器；数据缺失时逐项软降级，不影响分析主流程。
+- [新功能] 大盘复盘支持台股（`MARKET_REVIEW_REGION=tw`，并支持 `tw,us` 等逗号组合与 both）：加权指数/柜买指数/台湾50（Yfinance，NaN 数据自动过滤）、台股市场策略 blueprint（外资动向/电子权值/台币汇率）、台股新闻搜索词与 MarketLight region 扩展。
 
 ## [3.21.0] - 2026-06-07
 

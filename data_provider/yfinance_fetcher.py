@@ -352,9 +352,10 @@ class YfinanceFetcher(BaseFetcher):
 
     def get_main_indices(self, region: str = "cn") -> Optional[List[Dict[str, Any]]]:
         """
-        获取主要指数行情 (Yahoo Finance)，支持 A 股、美股与港股。
+        获取主要指数行情 (Yahoo Finance)，支持 A 股、美股、港股与台股。
         region=us 时委托给 _get_us_main_indices。
         region=hk 时委托给 _get_hk_main_indices。
+        region=tw 时委托给 _get_tw_main_indices。
         """
         import yfinance as yf
 
@@ -362,6 +363,8 @@ class YfinanceFetcher(BaseFetcher):
             return self._get_us_main_indices(yf)
         if region == "hk":
             return self._get_hk_main_indices(yf)
+        if region == "tw":
+            return self._get_tw_main_indices(yf)
 
         # A 股指数：akshare 代码 -> (yfinance 代码, 显示名称)
         yf_mapping = {
@@ -449,6 +452,41 @@ class YfinanceFetcher(BaseFetcher):
 
         except Exception as e:
             logger.error(f"[Yfinance] 获取港股指数行情失败: {e}")
+
+        return None
+
+    def _get_tw_main_indices(self, yf) -> Optional[List[Dict[str, Any]]]:
+        """获取台股主要指数行情（加权指数、柜买指数、台湾50），复用 _fetch_yf_ticker_data"""
+        # Yahoo Finance 台股指数符号映射：
+        # - TWII -> ^TWII（台湾加权指数）
+        # - TWOII -> ^TWOII（柜买指数，Yahoo 数据时有缺失，fail-soft）
+        # - 0050 -> 0050.TW（台湾50 ETF，作为大型权值股代理）
+        tw_indices = {
+            'TWII': ('^TWII', '加权指数'),
+            'TWOII': ('^TWOII', '柜买指数'),
+            '0050': ('0050.TW', '台湾50'),
+        }
+        results = []
+        try:
+            for code, (yf_symbol, name) in tw_indices.items():
+                try:
+                    item = self._fetch_yf_ticker_data(yf, yf_symbol, name, code)
+                    # Yahoo 对台股指数偶发返回 NaN（尤其盘后），过滤无效数据避免污染复盘
+                    current = (item or {}).get('current')
+                    if item and current is not None and current == current:
+                        results.append(item)
+                        logger.debug(f"[Yfinance] 获取台股指数 {name} 成功")
+                    elif item:
+                        logger.warning(f"[Yfinance] 台股指数 {name} 数据无效（NaN），已跳过")
+                except Exception as e:
+                    logger.warning(f"[Yfinance] 获取台股指数 {name} 失败: {e}")
+
+            if results:
+                logger.info(f"[Yfinance] 成功获取 {len(results)} 个台股指数行情")
+                return results
+
+        except Exception as e:
+            logger.error(f"[Yfinance] 获取台股指数行情失败: {e}")
 
         return None
 

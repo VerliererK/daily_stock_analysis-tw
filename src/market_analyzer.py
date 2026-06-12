@@ -137,7 +137,7 @@ class MarketAnalyzer:
         self.search_service = search_service
         self.analyzer = analyzer
         self.data_manager = DataFetcherManager()
-        self.region = region if region in ("cn", "us", "hk") else "cn"
+        self.region = region if region in ("cn", "us", "hk", "tw") else "cn"
         self.profile: MarketProfile = get_profile(self.region)
         self.strategy = get_market_strategy_blueprint(self.region)
 
@@ -160,6 +160,8 @@ class MarketAnalyzer:
             return "US market" if review_language == "en" else "美股市场"
         if self.region == "hk":
             return "Hong Kong market" if review_language == "en" else "港股市场"
+        if self.region == "tw":
+            return "Taiwan market" if review_language == "en" else "台股市场"
         if review_language == "en":
             return "A-share market"
         return "A股市场"
@@ -170,6 +172,8 @@ class MarketAnalyzer:
             return "USD bn" if self._get_review_language() == "en" else "十亿美元"
         if self.region == "hk":
             return "HKD bn" if self._get_review_language() == "en" else "十亿港元"
+        if self.region == "tw":
+            return "TWD 100m" if self._get_review_language() == "en" else "亿台币"
         return "CNY 100m" if self._get_review_language() == "en" else "亿"
 
     def _format_turnover_value(self, amount_raw: float) -> str:
@@ -192,9 +196,11 @@ class MarketAnalyzer:
 
     def _get_review_title(self, date: str) -> str:
         if self._get_review_language() == "en":
-            market_names = {"us": "US Market Recap", "hk": "HK Market Recap"}
+            market_names = {"us": "US Market Recap", "hk": "HK Market Recap", "tw": "Taiwan Market Recap"}
             market_name = market_names.get(self.region, "A-share Market Recap")
             return f"## {date} {market_name}"
+        if self.region == "tw":
+            return f"## {date} 台股大盘复盘"
         return f"## {date} 大盘复盘"
 
     def _get_index_hint(self) -> str:
@@ -203,6 +209,8 @@ class MarketAnalyzer:
                 return "Analyze the key moves in the S&P 500, Nasdaq, Dow, and other major indices."
             if self.region == "hk":
                 return "Analyze the key moves in the HSI, Hang Seng Tech, HSCEI, and other major indices."
+            if self.region == "tw":
+                return "Analyze the key moves in the TAIEX (weighted index), TPEX index, and large-cap semiconductor names."
             return "Analyze the price action in the SSE, SZSE, ChiNext, and other major indices."
         return self.profile.prompt_index_hint
 
@@ -491,6 +499,7 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
             "cn": "大盘" if review_language == "zh" else "A-share market",
             "us": "美股市场" if review_language == "zh" else "US market",
             "hk": "港股市场" if review_language == "zh" else "HK market",
+            "tw": "台股市场" if review_language == "zh" else "Taiwan market",
         }
         
         try:

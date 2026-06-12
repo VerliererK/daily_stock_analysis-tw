@@ -57,12 +57,13 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
         cases = [
             (None, ["cn"]),
             ("", ["cn"]),
-            ("both", ["cn", "hk", "us"]),
+            ("both", ["cn", "hk", "us", "tw"]),
             (" CN,US,cn ", ["cn", "us"]),
             ("us,cn,us", ["cn", "us"]),
             ("eu,apac", ["cn"]),
             (",,", ["cn"]),
             ("HK", ["hk"]),
+            ("tw,us", ["us", "tw"]),
             ("invalid", ["cn"]),
         ]
 
@@ -151,6 +152,11 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
             report="US body",
             market_light_snapshot={"region": "us", "trade_date": "2026-03-06", "score": 55},
         )
+        tw_analyzer = MagicMock()
+        tw_analyzer.run_daily_review_with_snapshot.return_value = SimpleNamespace(
+            report="TW body",
+            market_light_snapshot={"region": "tw", "trade_date": "2026-03-06", "score": 57},
+        )
 
         with patch.object(
             market_review_module,
@@ -159,7 +165,7 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
         ), patch.object(
             market_review_module,
             "MarketAnalyzer",
-            side_effect=[cn_analyzer, hk_analyzer, us_analyzer],
+            side_effect=[cn_analyzer, hk_analyzer, us_analyzer, tw_analyzer],
         ), patch.object(market_review_module, "_persist_market_review_history") as persist_history:
             result = run_market_review(notifier, send_notification=True)
 
@@ -167,6 +173,7 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
         self.assertIn("# HK Market Recap\n\nHK body", result)
         self.assertIn("> Next market recap follows", result)
         self.assertIn("# US Market Recap\n\nUS body", result)
+        self.assertIn("# Taiwan Market Recap\n\nTW body", result)
         saved_content = notifier.save_report_to_file.call_args.args[0]
         self.assertTrue(saved_content.startswith("# 🎯 Market Review\n\n"))
         self.assertIn("# A-share Market Recap\n\nCN body", saved_content)

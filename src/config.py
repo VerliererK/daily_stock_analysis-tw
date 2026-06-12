@@ -2274,10 +2274,14 @@ class Config:
         """解析大盘复盘市场区域，非法值记录警告后回退为 cn"""
         import logging
         v = (value or 'cn').strip().lower()
-        if v in ('cn', 'us', 'hk', 'both'):
+        valid = ('cn', 'us', 'hk', 'tw')
+        if v == 'both':
             return v
+        parts = [p.strip() for p in v.split(',') if p.strip()]
+        if parts and all(p in valid for p in parts):
+            return ','.join(parts)
         logging.getLogger(__name__).warning(
-            f"MARKET_REVIEW_REGION 配置值 '{value}' 无效，已回退为默认值 'cn'（合法值：cn / hk / us / both）"
+            f"MARKET_REVIEW_REGION 配置值 '{value}' 无效，已回退为默认值 'cn'（合法值：cn / hk / us / tw / both 或逗号组合）"
         )
         return 'cn'
 
