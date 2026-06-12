@@ -789,7 +789,66 @@ def _mark_chip_structure_unavailable(result: "AnalysisResult", language: str) ->
     data_perspective["chip_unavailable_reason"] = get_chip_unavailable_text(language)
 
 
-def normalize_chip_structure_availability(result: "AnalysisResult", chip_data: Any) -> None:
+def _build_tw_chip_structure_from_summary(tw_chip_summary: Any) -> Dict[str, Any]:
+    """从台股筹码面汇总构造 chip_structure 展示字段（台股无 A 股获利比例口径）。"""
+    if not isinstance(tw_chip_summary, dict):
+        return {}
+    inst = tw_chip_summary.get('institutional') or {}
+    margin = tw_chip_summary.get('margin') or {}
+    nd = inst.get('days') or margin.get('days') or 5
+
+    def _net_text(label: str, value: Any) -> Optional[str]:
+        try:
+            lots = int(value)
+        except (TypeError, ValueError):
+            return None
+        direction = "买超" if lots >= 0 else "卖超"
+        return f"{label}近{nd}日{direction}{abs(lots):,}张"
+
+    structure: Dict[str, Any] = {}
+
+    inst_parts = [
+        text for text in (
+            _net_text("外资", inst.get('foreign_net_nd')),
+            _net_text("投信", inst.get('trust_net_nd')),
+        ) if text
+    ]
+    if inst_parts:
+        structure['profit_ratio'] = "、".join(inst_parts)
+
+    margin_balance = margin.get('margin_balance')
+    if margin_balance is not None:
+        try:
+            change_nd = int(margin.get('margin_change_nd') or 0)
+            structure['avg_cost'] = (
+                f"融资余额{int(margin_balance):,}张（近{nd}日{change_nd:+,}张）"
+            )
+        except (TypeError, ValueError):
+            pass
+
+    foreign_ratio = tw_chip_summary.get('foreign_holding_ratio')
+    if foreign_ratio is not None:
+        structure['concentration'] = f"外资持股{float(foreign_ratio):.2f}%"
+
+    # 简单健康度规则：外资买超且融资未明显增加 -> 健康；外资大幅卖超且融资上升 -> 警惕
+    foreign_nd = inst.get('foreign_net_nd')
+    margin_change_nd = margin.get('margin_change_nd')
+    if foreign_nd is not None:
+        if foreign_nd > 0 and (margin_change_nd is None or margin_change_nd <= 0):
+            structure['chip_health'] = "健康"
+        elif foreign_nd < 0 and (margin_change_nd or 0) > 0:
+            structure['chip_health'] = "警惕"
+        else:
+            structure['chip_health'] = "一般"
+
+    return structure
+
+
+def normalize_chip_structure_availability(
+    result: "AnalysisResult",
+    chip_data: Any,
+    tw_chip_summary: Any = None,
+) -> None:
     """Fill valid chip metrics or collapse placeholder-only chip fields to one fallback line."""
     if not result:
         return
@@ -797,6 +856,26 @@ def normalize_chip_structure_availability(result: "AnalysisResult", chip_data: A
     if _has_meaningful_chip_data(chip_data):
         fill_chip_structure_if_needed(result, chip_data)
         return
+    if tw_chip_summary:
+        # 台股法人/信用交易筹码面：LLM 写入了有效判断时予以保留；
+        # 否则用数据直接填充（确定性，不依赖 LLM 遵循指引）
+        if not isinstance(result.dashboard, dict):
+            result.dashboard = {}
+        data_perspective = result.dashboard.get("data_perspective")
+        if not isinstance(data_perspective, dict):
+            data_perspective = {}
+            result.dashboard["data_perspective"] = data_perspective
+        chip_structure = data_perspective.get("chip_structure")
+        if isinstance(chip_structure, dict) and any(
+            not is_chip_placeholder_value(value) for value in chip_structure.values()
+        ):
+            return
+        filled = _build_tw_chip_structure_from_summary(tw_chip_summary)
+        if filled:
+            data_perspective["chip_structure"] = filled
+            data_perspective.pop("chip_unavailable_reason", None)
+            logger.info("[chip_structure] 已用台股筹码面（法人/信用交易）填充展示字段")
+            return
     _mark_chip_structure_unavailable(result, language)
 
 
@@ -2853,7 +2932,7 @@ class GeminiAnalyzer:
                 result.market_snapshot = self._build_market_snapshot(context)
                 result.model_used = model_used
                 result.report_language = report_language
-                normalize_chip_structure_availability(result, context.get("chip"))
+                normalize_chip_structure_availability(result, context.get("chip"), context.get("tw_chip"))
 
                 # 内容完整性校验（可选）
                 if not config.report_integrity_enabled:
@@ -3135,7 +3214,8 @@ class GeminiAnalyzer:
 | 70%筹码集中度 | {chip.get('concentration_70', 0):.2%} | |
 | 筹码状态 | {chip.get('chip_status', unknown_text)} | |
 """
-        else:
+        elif not (isinstance(context.get('tw_chip'), dict) and context['tw_chip']):
+            # 台股有法人/信用交易筹码面时不再提示 A 股口径的筹码分布缺失
             chip_unavailable_text = get_chip_unavailable_text(report_language)
             chip_instruction = (
                 "Do not fabricate profit ratio, average cost, or concentration. Mention chip data "
@@ -3148,7 +3228,52 @@ class GeminiAnalyzer:
 > {chip_unavailable_text}
 > {chip_instruction}
 """
-        
+
+        # 添加台股筹码面（三大法人买卖超/融资融券/外资持股）
+        if isinstance(context.get('tw_chip'), dict) and context['tw_chip']:
+            tw_chip = context['tw_chip']
+            inst = tw_chip.get('institutional') or {}
+            margin = tw_chip.get('margin') or {}
+            nd = inst.get('days') or margin.get('days') or 5
+
+            def _fmt_lots(value: Any) -> str:
+                try:
+                    return f"{int(value):+,} 张"
+                except (TypeError, ValueError):
+                    return "N/A"
+
+            tw_chip_rows = []
+            if inst:
+                tw_chip_rows.extend([
+                    f"| 外资买卖超 | {_fmt_lots(inst.get('foreign_net_today'))} | {_fmt_lots(inst.get('foreign_net_nd'))} |",
+                    f"| 投信买卖超 | {_fmt_lots(inst.get('trust_net_today'))} | {_fmt_lots(inst.get('trust_net_nd'))} |",
+                    f"| 自营商买卖超 | {_fmt_lots(inst.get('dealer_net_today'))} | {_fmt_lots(inst.get('dealer_net_nd'))} |",
+                ])
+            if margin:
+                margin_balance = margin.get('margin_balance')
+                short_balance = margin.get('short_balance')
+                tw_chip_rows.extend([
+                    f"| 融资余额 | {margin_balance:,} 张 ({_fmt_lots(margin.get('margin_change_today'))}) | {_fmt_lots(margin.get('margin_change_nd'))} |"
+                    if margin_balance is not None else "| 融资余额 | N/A | N/A |",
+                    f"| 融券余额 | {short_balance:,} 张 ({_fmt_lots(margin.get('short_change_today'))}) | {_fmt_lots(margin.get('short_change_nd'))} |"
+                    if short_balance is not None else "| 融券余额 | N/A | N/A |",
+                ])
+            foreign_ratio = tw_chip.get('foreign_holding_ratio')
+            if foreign_ratio is not None:
+                tw_chip_rows.append(f"| 外资持股比率 | {foreign_ratio:.2f}% | |")
+
+            if tw_chip_rows:
+                tw_chip_rows_text = "\n".join(tw_chip_rows)
+                prompt += f"""
+### 台股筹码面（法人与信用交易，截至 {tw_chip.get('latest_date', 'N/A')}）
+| 指标 | 当日 | 近{nd}日累计 |
+|------|------|------|
+{tw_chip_rows_text}
+
+> 法人买卖超与融资融券仅作为筹码参考过滤器：外资连续卖超且融资余额上升时，散户接手意愿增加、反弹质量存疑，不宜追价；外资回补叠加融券回补时，关注轧空动能；投信连续买超常伴随波段行情，但需留意季底作帐结束后的退潮风险。
+> 请把台股筹码结论写入 `chip_structure`（台股无 A 股口径的获利比例/平均成本数据）：`profit_ratio` 填三大法人近{nd}日动向摘要，`avg_cost` 填融资融券变化摘要，`concentration` 填外资持股比率与解读，`chip_health` 按法人与信用交易信号给出 健康/一般/警惕。
+"""
+
         # 添加趋势分析结果（仅隐式内建 bull_trend 默认回退保留旧口径）
         if 'trend_analysis' in context:
             trend = _sanitize_trend_analysis_for_prompt(

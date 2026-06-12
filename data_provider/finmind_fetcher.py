@@ -191,3 +191,116 @@ class FinMindFetcher(BaseFetcher):
             return None
         info = self._load_stock_info().get(to_finmind_stock_id(stock_code))
         return (info or {}).get('type') or None
+
+    # ------------------------------------------------------------------
+    # 台股筹码面（三大法人买卖超 / 融资融券 / 外资持股）
+    # ------------------------------------------------------------------
+
+    def _fetch_dataset_rows(self, dataset: str, stock_id: str, start_date: str) -> list:
+        """拉取单一筹码面 dataset 的原始 rows（失败返回空 list，fail-soft）。"""
+        try:
+            self.random_sleep(0.3, 0.8)
+            data = self._request({
+                'dataset': dataset,
+                'data_id': stock_id,
+                'start_date': start_date,
+            })
+            return data.get('data') or []
+        except Exception as e:
+            logger.debug(f"[FinMind] 获取 {dataset}({stock_id}) 失败: {e}")
+            return []
+
+    def get_tw_chip_summary(self, stock_code: str, days: int = 5) -> Optional[Dict[str, Any]]:
+        """汇总台股筹码面数据，供 LLM 分析上下文使用。
+
+        Returns:
+            {
+              'latest_date': 'YYYY-MM-DD',
+              'institutional': {       # 单位：张（1000 股），正值为买超
+                  'foreign_net_today', 'trust_net_today', 'dealer_net_today',
+                  'foreign_net_nd', 'trust_net_nd', 'dealer_net_nd', 'days',
+              },
+              'margin': {              # 单位：张
+                  'margin_balance', 'margin_change_today', 'margin_change_nd',
+                  'short_balance', 'short_change_today', 'short_change_nd',
+              },
+              'foreign_holding_ratio': float,  # 外资持股比率（%）
+            }
+            三个子数据全部缺失时返回 None。
+        """
+        if not is_tw_stock_code(stock_code):
+            return None
+
+        from datetime import datetime, timedelta
+        stock_id = to_finmind_stock_id(stock_code)
+        # 取约 days 个交易日：日历天数放宽到 2 倍 + 假日缓冲
+        start_date = (datetime.now() - timedelta(days=days * 2 + 6)).strftime('%Y-%m-%d')
+
+        summary: Dict[str, Any] = {}
+
+        # --- 三大法人买卖超 ---
+        rows = self._fetch_dataset_rows('TaiwanStockInstitutionalInvestorsBuySell', stock_id, start_date)
+        if rows:
+            group_of = {
+                'Foreign_Investor': 'foreign',
+                'Foreign_Dealer_Self': 'foreign',
+                'Investment_Trust': 'trust',
+                'Dealer_self': 'dealer',
+                'Dealer_Hedging': 'dealer',
+            }
+            dates = sorted({r['date'] for r in rows})[-days:]
+            latest_date = dates[-1]
+            net_nd = {'foreign': 0, 'trust': 0, 'dealer': 0}
+            net_today = {'foreign': 0, 'trust': 0, 'dealer': 0}
+            for r in rows:
+                group = group_of.get(r.get('name'))
+                if group is None or r['date'] not in dates:
+                    continue
+                net = (r.get('buy') or 0) - (r.get('sell') or 0)
+                net_nd[group] += net
+                if r['date'] == latest_date:
+                    net_today[group] += net
+            summary['latest_date'] = latest_date
+            summary['institutional'] = {
+                'days': len(dates),
+                # 股 -> 张
+                'foreign_net_today': round(net_today['foreign'] / 1000),
+                'trust_net_today': round(net_today['trust'] / 1000),
+                'dealer_net_today': round(net_today['dealer'] / 1000),
+                'foreign_net_nd': round(net_nd['foreign'] / 1000),
+                'trust_net_nd': round(net_nd['trust'] / 1000),
+                'dealer_net_nd': round(net_nd['dealer'] / 1000),
+            }
+
+        # --- 融资融券（单位：张）---
+        rows = self._fetch_dataset_rows('TaiwanStockMarginPurchaseShortSale', stock_id, start_date)
+        if rows:
+            rows = sorted(rows, key=lambda r: r['date'])[-days:]
+            latest = rows[-1]
+            margin_balance = latest.get('MarginPurchaseTodayBalance')
+            short_balance = latest.get('ShortSaleTodayBalance')
+            if margin_balance is not None:
+                summary.setdefault('latest_date', latest['date'])
+                summary['margin'] = {
+                    'margin_balance': margin_balance,
+                    'margin_change_today': margin_balance - (latest.get('MarginPurchaseYesterdayBalance') or margin_balance),
+                    'margin_change_nd': margin_balance - (rows[0].get('MarginPurchaseYesterdayBalance') or margin_balance),
+                    'short_balance': short_balance,
+                    'short_change_today': (short_balance or 0) - (latest.get('ShortSaleYesterdayBalance') or short_balance or 0),
+                    'short_change_nd': (short_balance or 0) - (rows[0].get('ShortSaleYesterdayBalance') or short_balance or 0),
+                    'days': len(rows),
+                }
+
+        # --- 外资持股比率（%）---
+        rows = self._fetch_dataset_rows('TaiwanStockShareholding', stock_id, start_date)
+        if rows:
+            latest = sorted(rows, key=lambda r: r['date'])[-1]
+            ratio = latest.get('ForeignInvestmentSharesRatio')
+            if ratio is not None:
+                summary['foreign_holding_ratio'] = float(ratio)
+
+        if not summary:
+            logger.debug(f"[FinMind] {stock_id} 筹码面数据全部缺失")
+            return None
+        logger.info(f"[FinMind] {stock_id} 台股筹码面汇总完成: {sorted(summary.keys())}")
+        return summary

@@ -351,6 +351,15 @@ class StockAnalysisPipeline:
             except Exception as e:
                 logger.warning(f"{stock_name}({code}) 获取筹码分布失败: {e}")
 
+            # Step 2.5: 台股筹码面（三大法人买卖超/融资融券/外资持股，FinMind）
+            tw_chip_summary = None
+            try:
+                tw_chip_summary = self.fetcher_manager.get_tw_chip_summary(code)
+                if tw_chip_summary:
+                    logger.info(f"{stock_name}({code}) 台股筹码面: {sorted(tw_chip_summary.keys())}")
+            except Exception as e:
+                logger.debug(f"{stock_name}({code}) 获取台股筹码面失败: {e}")
+
             # If agent mode is explicitly enabled, or specific agent skills are configured, use the Agent analysis pipeline.
             # NOTE: use config.agent_mode (explicit opt-in) instead of
             # config.is_agent_available() so that users who only configured an
@@ -439,6 +448,7 @@ class StockAnalysisPipeline:
                     market_phase_context=market_phase_context_dict,
                     market_phase_summary=market_phase_summary,
                     portfolio_context=portfolio_context,
+                    tw_chip_summary=tw_chip_summary,
                 )
 
             # Step 4: 多维度情报搜索（最新消息+风险排查+业绩预期）
@@ -516,14 +526,15 @@ class StockAnalysisPipeline:
             
             # Step 6: 增强上下文数据（添加实时行情、筹码、趋势分析结果、股票名称）
             enhanced_context = self._enhance_context(
-                context, 
-                realtime_quote, 
+                context,
+                realtime_quote,
                 chip_data,
                 trend_result,
                 stock_name,  # 传入股票名称
                 fundamental_context,
                 market_phase_context=market_phase_context_dict,
                 portfolio_context=portfolio_context,
+                tw_chip_summary=tw_chip_summary,
             )
             enhanced_context["market_phase_context"] = market_phase_context_dict
             if portfolio_context is not None:
@@ -615,7 +626,7 @@ class StockAnalysisPipeline:
 
             # Step 7.6: chip_structure fallback (Issue #589) and unavailable collapse
             if result:
-                normalize_chip_structure_availability(result, chip_data)
+                normalize_chip_structure_availability(result, chip_data, tw_chip_summary)
 
             # Step 7.7: price_position fallback
             if result:
@@ -692,6 +703,7 @@ class StockAnalysisPipeline:
         fundamental_context: Optional[Dict[str, Any]] = None,
         market_phase_context: Optional[Dict[str, Any]] = None,
         portfolio_context: Optional[Dict[str, Any]] = None,
+        tw_chip_summary: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         增强分析上下文
@@ -762,6 +774,10 @@ class StockAnalysisPipeline:
                 'concentration_70': chip_data.concentration_70,
                 'chip_status': chip_data.get_chip_status(current_price or 0),
             }
+
+        # 添加台股筹码面（三大法人/融资融券/外资持股）
+        if tw_chip_summary:
+            enhanced['tw_chip'] = tw_chip_summary
         
         # 添加趋势分析结果
         if trend_result:
@@ -986,6 +1002,7 @@ class StockAnalysisPipeline:
         market_phase_context: Optional[Dict[str, Any]] = None,
         market_phase_summary: Optional[Dict[str, Any]] = None,
         portfolio_context: Optional[Dict[str, Any]] = None,
+        tw_chip_summary: Optional[Dict[str, Any]] = None,
     ) -> Optional[AnalysisResult]:
         """
         使用 Agent 模式分析单只股票。
@@ -1021,6 +1038,8 @@ class StockAnalysisPipeline:
                 initial_context["realtime_quote"] = self._safe_to_dict(realtime_quote)
             if chip_data:
                 initial_context["chip_distribution"] = self._safe_to_dict(chip_data)
+            if tw_chip_summary:
+                initial_context["tw_chip"] = tw_chip_summary
             if trend_result:
                 initial_context["trend_result"] = self._safe_to_dict(trend_result)
 
@@ -1128,8 +1147,8 @@ class StockAnalysisPipeline:
                         missing,
                     )
             # chip_structure fallback (Issue #589), before save_analysis_history
-            if result and chip_data is not None:
-                normalize_chip_structure_availability(result, chip_data)
+            if result and (chip_data is not None or tw_chip_summary):
+                normalize_chip_structure_availability(result, chip_data, tw_chip_summary)
 
             # price_position fallback (same as non-agent path Step 7.7)
             if result:

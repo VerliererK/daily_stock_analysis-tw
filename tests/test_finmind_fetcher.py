@@ -203,6 +203,94 @@ class TestFinMindFetcherStockName(unittest.TestCase):
         self.assertIsNone(self.fetcher.get_stock_name('600519'))
 
 
+class TestFinMindTwChipSummary(unittest.TestCase):
+    """get_tw_chip_summary：三大法人/融资融券/外资持股汇总。"""
+
+    def setUp(self):
+        from data_provider.finmind_fetcher import FinMindFetcher
+        self.fetcher = FinMindFetcher()
+        self.fetcher._token = 'test_token'
+
+    @staticmethod
+    def _dispatch(params):
+        dataset = params.get('dataset')
+        if dataset == 'TaiwanStockInstitutionalInvestorsBuySell':
+            rows = [
+                # 前一日：外资买超 2000 张、投信卖超 500 张
+                {'date': '2026-06-11', 'stock_id': '2330', 'name': 'Foreign_Investor', 'buy': 3_000_000, 'sell': 1_000_000},
+                {'date': '2026-06-11', 'stock_id': '2330', 'name': 'Investment_Trust', 'buy': 100_000, 'sell': 600_000},
+                {'date': '2026-06-11', 'stock_id': '2330', 'name': 'Dealer_self', 'buy': 200_000, 'sell': 100_000},
+                # 最新一日：外资卖超 1000 张（含 Foreign_Dealer_Self 买 100 张）
+                {'date': '2026-06-12', 'stock_id': '2330', 'name': 'Foreign_Investor', 'buy': 1_000_000, 'sell': 2_100_000},
+                {'date': '2026-06-12', 'stock_id': '2330', 'name': 'Foreign_Dealer_Self', 'buy': 100_000, 'sell': 0},
+                {'date': '2026-06-12', 'stock_id': '2330', 'name': 'Investment_Trust', 'buy': 400_000, 'sell': 100_000},
+                {'date': '2026-06-12', 'stock_id': '2330', 'name': 'Dealer_Hedging', 'buy': 0, 'sell': 50_000},
+            ]
+        elif dataset == 'TaiwanStockMarginPurchaseShortSale':
+            rows = [
+                {'date': '2026-06-11', 'stock_id': '2330',
+                 'MarginPurchaseTodayBalance': 28_000, 'MarginPurchaseYesterdayBalance': 28_500,
+                 'ShortSaleTodayBalance': 1_200, 'ShortSaleYesterdayBalance': 1_100},
+                {'date': '2026-06-12', 'stock_id': '2330',
+                 'MarginPurchaseTodayBalance': 27_470, 'MarginPurchaseYesterdayBalance': 28_000,
+                 'ShortSaleTodayBalance': 1_000, 'ShortSaleYesterdayBalance': 1_200},
+            ]
+        elif dataset == 'TaiwanStockShareholding':
+            rows = [
+                {'date': '2026-06-12', 'stock_id': '2330', 'ForeignInvestmentSharesRatio': 69.96},
+            ]
+        else:
+            rows = []
+        return _make_mock_response({'msg': 'success', 'status': 200, 'data': rows})
+
+    @patch('data_provider.finmind_fetcher.requests.get')
+    def test_chip_summary_aggregation(self, mock_get):
+        mock_get.side_effect = lambda url, params=None, timeout=None: self._dispatch(params or {})
+        summary = self.fetcher.get_tw_chip_summary('TW2330')
+        self.assertIsNotNone(summary)
+        self.assertEqual(summary['latest_date'], '2026-06-12')
+
+        inst = summary['institutional']
+        # 最新一日：外资 = (1000000-2100000) + 100000 = -1000 张
+        self.assertEqual(inst['foreign_net_today'], -1000)
+        self.assertEqual(inst['trust_net_today'], 300)
+        self.assertEqual(inst['dealer_net_today'], -50)
+        # 累计：外资 = 2000 - 1000 = 1000 张
+        self.assertEqual(inst['foreign_net_nd'], 1000)
+        self.assertEqual(inst['trust_net_nd'], -200)
+
+        margin = summary['margin']
+        self.assertEqual(margin['margin_balance'], 27_470)
+        self.assertEqual(margin['margin_change_today'], -530)
+        self.assertEqual(margin['margin_change_nd'], 27_470 - 28_500)
+        self.assertEqual(margin['short_balance'], 1_000)
+        self.assertEqual(margin['short_change_today'], -200)
+
+        self.assertAlmostEqual(summary['foreign_holding_ratio'], 69.96)
+
+    @patch('data_provider.finmind_fetcher.requests.get')
+    def test_chip_summary_partial_failure_is_soft(self, mock_get):
+        def dispatch(url, params=None, timeout=None):
+            params = params or {}
+            if params.get('dataset') == 'TaiwanStockMarginPurchaseShortSale':
+                raise Exception('quota exceeded')
+            return self._dispatch(params)
+        mock_get.side_effect = dispatch
+        summary = self.fetcher.get_tw_chip_summary('TW2330')
+        self.assertIsNotNone(summary)
+        self.assertIn('institutional', summary)
+        self.assertNotIn('margin', summary)
+
+    @patch('data_provider.finmind_fetcher.requests.get')
+    def test_chip_summary_all_failed_returns_none(self, mock_get):
+        mock_get.side_effect = Exception('network down')
+        self.assertIsNone(self.fetcher.get_tw_chip_summary('TW2330'))
+
+    def test_chip_summary_non_tw(self):
+        self.assertIsNone(self.fetcher.get_tw_chip_summary('600519'))
+        self.assertIsNone(self.fetcher.get_tw_chip_summary('AAPL'))
+
+
 class TestFinMindFetcherRegistration(unittest.TestCase):
     """FinMindFetcher 应无条件注册（免 token 可用）。"""
 

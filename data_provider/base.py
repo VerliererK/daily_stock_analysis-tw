@@ -1987,6 +1987,28 @@ class DataFetcherManager:
         logger.warning(f"[筹码分布] {stock_code} 所有数据源均失败")
         return None
 
+    def get_tw_chip_summary(self, stock_code: str) -> Optional[Dict[str, Any]]:
+        """
+        台股筹码面汇总（三大法人买卖超/融资融券/外资持股）。
+
+        通过能力探测委托给实现 get_tw_chip_summary 的数据源（目前为 FinMind）；
+        非台股代码直接返回 None。
+        """
+        stock_code = normalize_stock_code(stock_code)
+        if _market_tag(stock_code) != "tw":
+            return None
+        for fetcher in self._get_fetchers_snapshot():
+            if not hasattr(fetcher, "get_tw_chip_summary"):
+                continue
+            try:
+                summary = self._call_fetcher_method(fetcher, "get_tw_chip_summary", stock_code)
+                if summary:
+                    return summary
+            except Exception as e:
+                logger.debug(f"[{fetcher.name}] 获取台股筹码面失败: {e}")
+                continue
+        return None
+
     def get_stock_name(self, stock_code: str, allow_realtime: bool = True) -> Optional[str]:
         """
         获取股票中文名称（自动切换数据源）
