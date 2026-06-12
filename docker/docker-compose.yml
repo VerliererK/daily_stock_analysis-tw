@@ -14,6 +14,10 @@ x-common: &common
   build:
     context: ..
     dockerfile: docker/Dockerfile
+    args:
+      # 对齐宿主机用户 uid（ubuntu=1001），容器与本地开发共用 data/logs/reports 不再互抢所有权
+      APP_UID: "1001"
+      APP_GID: "1001"
   restart: unless-stopped
 
   # 环境变量（从 .env 文件加载）。不要将 ../.env 作为单文件 volume 挂载到 /app/.env，

@@ -36,9 +36,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     && rm -rf /var/lib/apt/lists/*
 
-# 创建非 root 用户 (UID 1000)
-RUN groupadd -g 1000 dsa && \
-    useradd -u 1000 -g dsa -m dsa
+# 创建非 root 用户（UID 可由 build arg 覆盖；本 fork 在 compose 设为 1001 对齐宿主机用户，
+# 避免 entrypoint 权限修复与宿主机本地开发互相抢占挂载目录所有权）
+ARG APP_UID=1000
+ARG APP_GID=1000
+RUN groupadd -g ${APP_GID} dsa && \
+    useradd -u ${APP_UID} -g dsa -m dsa
+ENV APP_UID=${APP_UID}
+ENV APP_GID=${APP_GID}
 
 # 复制依赖文件
 COPY requirements.txt .
