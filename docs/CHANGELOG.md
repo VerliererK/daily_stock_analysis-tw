@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [修复] Docker 镜像运行用户 UID/GID 改为可配置 build arg（默认 1000 不变），compose 设为 1001 对齐宿主机用户，避免容器 entrypoint 权限修复与宿主机本地开发互相抢占 data/logs/reports 挂载目录所有权。
 - [新功能] 台股个股分析注入 FinMind 筹码面数据：三大法人买卖超（外资/投信/自营商，当日与近5日累计）、融资融券余额与增减、外资持股比率，作为 LLM 分析上下文的筹码参考过滤器；数据缺失时逐项软降级，不影响分析主流程。
 - [新功能] 大盘复盘支持台股（`MARKET_REVIEW_REGION=tw`，并支持 `tw,us` 等逗号组合与 both）：加权指数/柜买指数/台湾50（Yfinance，NaN 数据自动过滤）、台股市场策略 blueprint（外资动向/电子权值/台币汇率）、台股新闻搜索词与 MarketLight region 扩展。
+- [改进] 台股个股新闻搜索改用台湾繁体查询词与台股资讯生态用语（重大訊息/法說會/處置/違約交割），查询使用纯数字代码（2330 而非 TW2330），Brave 搜索 locale 对台股使用 zh-hant/TW，台股代码即使股名为英文也优先中文资讯。
 
 ## [3.21.0] - 2026-06-07
 

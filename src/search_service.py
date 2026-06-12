@@ -33,6 +33,7 @@ from tenacity import (
 )
 
 from data_provider.us_index_mapping import is_us_index_code
+from data_provider.tw_market import is_tw_stock_code, to_finmind_stock_id
 from src.config import (
     NEWS_STRATEGY_WINDOWS,
     normalize_news_strategy_profile,
@@ -2315,7 +2316,10 @@ class SearchService:
             return True
         # Positive A-stock identification: 6-digit numeric codes (e.g. 600519)
         code = (stock_code or "").strip()
-        return code.isdigit() and len(code) == 6
+        if code.isdigit() and len(code) == 6:
+            return True
+        # 台股（TW2330 / 2330.TW / 裸 4 位数字）也优先中文资讯
+        return is_tw_stock_code(code)
 
     @classmethod
     def _is_chinese_news_result(cls, item: SearchResult) -> bool:
@@ -2378,6 +2382,9 @@ class SearchService:
     ) -> Dict[str, str]:
         """Resolve Brave locale hints without forcing US bias onto non-US symbols."""
         if prefer_chinese:
+            # 台股偏好台湾繁体/台湾站点结果
+            if is_tw_stock_code(stock_code):
+                return {"search_lang": "zh-hant", "country": "TW"}
             return {"search_lang": "zh-hans", "country": "CN"}
         if cls._is_us_stock(stock_code):
             return {"search_lang": "en", "country": "US"}
@@ -3199,6 +3206,9 @@ class SearchService:
         if focus_keywords:
             # 如果提供了关键词，直接使用关键词作为查询
             query = " ".join(focus_keywords)
+        elif is_tw_stock_code(stock_code):
+            # 台股：查询里用纯数字代码（TW2330 -> 2330）并带「台股」语境
+            query = f"{stock_name} {to_finmind_stock_id(stock_code)} 台股 最新消息"
         elif prefer_chinese:
             query = f"{stock_name} {stock_code} 股票 最新消息"
         elif is_foreign:
@@ -3459,8 +3469,68 @@ class SearchService:
 
         is_foreign = self._is_foreign_stock(stock_code)
         is_index_etf = self.is_index_or_etf(stock_code, stock_name)
+        is_tw = is_tw_stock_code(stock_code)
 
-        if is_foreign:
+        if is_tw:
+            # 台股：繁体台湾用语 + 台湾资讯生态（重大讯息/法说会/处置股票）
+            tw_digits = to_finmind_stock_id(stock_code)
+            search_dimensions = [
+                {
+                    'name': 'latest_news',
+                    'query': f"{stock_name} {tw_digits} 台股 最新 新聞",
+                    'desc': '最新消息',
+                    'tavily_topic': 'news',
+                    'strict_freshness': True,
+                },
+                {
+                    'name': 'market_analysis',
+                    'query': f"{stock_name} 目標價 評等 外資 報告",
+                    'desc': '机构分析',
+                    'tavily_topic': None,
+                    'strict_freshness': False,
+                },
+                {
+                    'name': 'risk_check',
+                    'query': (
+                        f"{stock_name} 指數走勢 追蹤誤差 淨值 表現"
+                        if is_index_etf else f"{stock_name} 利空 處置 違約交割 訴訟 風險"
+                    ),
+                    'desc': '风险排查',
+                    'tavily_topic': None if is_index_etf else 'news',
+                    'strict_freshness': not is_index_etf,
+                },
+                {
+                    'name': 'announcements',
+                    'query': (
+                        f"{stock_name} {tw_digits} 公告 指數調整 成分變化"
+                        if is_index_etf else f"{stock_name} {tw_digits} 重大訊息 公告 法說會"
+                    ),
+                    'desc': '公司公告',
+                    'tavily_topic': 'news',
+                    'strict_freshness': True,
+                },
+                {
+                    'name': 'earnings',
+                    'query': (
+                        f"{stock_name} 指數成分 淨值 追蹤表現"
+                        if is_index_etf else f"{stock_name} 營收 財報 獲利 年增 法說"
+                    ),
+                    'desc': '业绩预期',
+                    'tavily_topic': None,
+                    'strict_freshness': False,
+                },
+                {
+                    'name': 'industry',
+                    'query': (
+                        f"{stock_name} 指數成分股 產業配置 權重"
+                        if is_index_etf else f"{stock_name} 產業 競爭對手 市佔率 展望"
+                    ),
+                    'desc': '行业分析',
+                    'tavily_topic': None,
+                    'strict_freshness': False,
+                },
+            ]
+        elif is_foreign:
             search_dimensions = [
                 {
                     'name': 'latest_news',
