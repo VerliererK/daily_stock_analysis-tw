@@ -17,6 +17,7 @@ from src.analyzer import AnalysisResult
 from src.config import get_config
 from src.market_phase_summary import format_public_market_status_line, format_public_phase_pack_excerpt
 from src.report_language import (
+    apply_report_language_variant,
     get_localized_stock_name,
     get_report_labels,
     get_signal_level,
@@ -205,7 +206,8 @@ def render(
             autoescape=select_autoescape(default=False),
         )
         template = env.get_template(template_name)
-        return template.render(**context)
+        # REPORT_LANGUAGE=zh-tw 时将模板/硬编码简体文案兜底转为台湾繁体（幂等）
+        return apply_report_language_variant(template.render(**context))
     except Exception as e:
         logger.warning("Report render failed for %s: %s", template_name, e)
         return None

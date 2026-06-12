@@ -57,6 +57,7 @@ from src.report_language import (
 from src.schemas.decision_action import build_action_fields
 from src.schemas.report_schema import AnalysisReportSchema
 from src.market_context import get_market_role, get_market_guidelines
+from src.report_language import get_active_report_language_variant
 from src.market_phase_prompt import format_market_phase_prompt_section
 
 logger = logging.getLogger(__name__)
@@ -2149,6 +2150,16 @@ class GeminiAnalyzer:
 - Use the common English company name when you are confident; otherwise keep the original listed company name instead of inventing one.
 - This includes `stock_name`, `trend_prediction`, `operation_advice`, `confidence_level`, nested dashboard text, checklist items, and all narrative summaries.
 """
+        if get_active_report_language_variant() == "zh-tw":
+            return base_prompt + """
+
+## 輸出語言（最高優先級）
+
+- 所有 JSON 鍵名保持不變。
+- `decision_type` 必須保持為 `buy|hold|sell`。
+- 所有面向使用者的人類可讀文字必須使用**台灣繁體中文**，並採用台灣金融市場慣用語（例如：本益比、股價淨值比、殖利率、法人買賣超、量能、營收、漲跌停）。
+- 股票名稱使用台灣慣用名稱（例如：台積電、聯發科），不要使用簡體字。
+"""
         return base_prompt + """
 
 ## 输出语言（最高优先级）
@@ -3338,13 +3349,19 @@ class GeminiAnalyzer:
 - When data is missing, explain it in English instead of Chinese.
 """
         else:
+            zh_tw_lines = ""
+            if get_active_report_language_variant() == "zh-tw":
+                zh_tw_lines = (
+                    "- 中文必須使用**台灣繁體中文**，採用台灣金融慣用語"
+                    "（本益比、殖利率、法人買賣超、量能、漲跌停），不要使用簡體字。\n"
+                )
             prompt += f"""
 
 ### 输出语言要求（最高优先级）
 - 所有 JSON 键名必须保持不变，不要翻译键名。
 - `decision_type` 必须保持为 `buy`、`hold`、`sell`。
 - 所有面向用户的人类可读文本值必须使用中文。
-- 当数据缺失时，请使用中文直接说明“{no_data_text}，无法判断”。
+{zh_tw_lines}- 当数据缺失时，请使用中文直接说明“{no_data_text}，无法判断”。
 """
         
         return prompt

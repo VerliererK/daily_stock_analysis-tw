@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from src.report_language import (
     is_supported_report_language_value,
     normalize_report_language,
+    get_report_language_variant,
+    set_active_report_language_variant,
 )
 from src.notification_routing import parse_notification_route_channels
 from src.notification_noise import (
@@ -826,6 +828,8 @@ class Config:
     # 报告类型：simple(精简) 或 full(完整)
     report_type: str = "simple"
     report_language: str = "zh"
+    # zh 的台湾繁体变体（REPORT_LANGUAGE=zh-tw 时为 'zh-tw'，其余为 None）
+    report_language_variant: Optional[str] = None
 
     # 仅分析结果摘要：true 时只推送汇总，不含个股详情（Issue #262）
     report_summary_only: bool = False
@@ -1422,6 +1426,9 @@ class Config:
         report_language_raw = cls._resolve_report_language_env_value(
             preexisting_report_language
         )
+        report_language_variant = get_report_language_variant(report_language_raw)
+        # push 给 report_language 模块，供 label/prompt 本地化读取（避免反向依赖 config）
+        set_active_report_language_variant(report_language_variant)
         report_show_llm_model_raw = os.getenv('REPORT_SHOW_LLM_MODEL')
         report_show_llm_model = parse_env_bool(report_show_llm_model_raw, default=True)
         if report_show_llm_model_raw is not None and not report_show_llm_model_raw.strip():
@@ -1630,6 +1637,7 @@ class Config:
             single_stock_notify=os.getenv('SINGLE_STOCK_NOTIFY', 'false').lower() == 'true',
             report_type=cls._parse_report_type(os.getenv('REPORT_TYPE', 'simple')),
             report_language=cls._parse_report_language(report_language_raw),
+            report_language_variant=report_language_variant,
             report_summary_only=os.getenv('REPORT_SUMMARY_ONLY', 'false').lower() == 'true',
             report_show_llm_model=report_show_llm_model,
             report_templates_dir=os.getenv('REPORT_TEMPLATES_DIR', 'templates'),

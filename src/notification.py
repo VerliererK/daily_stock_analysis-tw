@@ -38,6 +38,7 @@ from src.notification_noise import (
     release_notification_noise,
 )
 from src.report_language import (
+    apply_report_language_variant,
     get_localized_stock_name,
     get_report_labels,
     get_signal_level,
@@ -71,6 +72,24 @@ from src.notification_sender import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _localized_report_output(func):
+    """报告生成器装饰器：REPORT_LANGUAGE=zh-tw 时将输出文案转为台湾繁体。
+
+    LLM 内容已由 prompt 指示原生输出繁体；此处兜底转换模板/硬编码的简体字串。
+    对已是繁体的文本转换为幂等操作。
+    """
+    import functools
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        output = func(*args, **kwargs)
+        if isinstance(output, str):
+            return apply_report_language_variant(output)
+        return output
+
+    return wrapper
 
 
 def _safe_float(value: Any) -> Optional[float]:
@@ -316,6 +335,7 @@ class NotificationService(
         self._history_compare_cache[cache_key] = history_by_code
         return {"history_by_code": history_by_code}
 
+    @_localized_report_output
     def generate_aggregate_report(
         self,
         results: List[AnalysisResult],
@@ -775,6 +795,7 @@ class NotificationService(
         
         return success
         
+    @_localized_report_output
     def generate_daily_report(
         self,
         results: List[AnalysisResult],
@@ -1017,6 +1038,7 @@ class NotificationService(
             self._get_report_language(result),
         )
     
+    @_localized_report_output
     def generate_dashboard_report(
         self,
         results: List[AnalysisResult],
@@ -1336,6 +1358,7 @@ class NotificationService(
         
         return "\n".join(report_lines)
     
+    @_localized_report_output
     def generate_wechat_dashboard(self, results: List[AnalysisResult]) -> str:
         """
         生成企业微信决策仪表盘精简版（控制在4000字符内）
@@ -1501,6 +1524,7 @@ class NotificationService(
 
         return content
 
+    @_localized_report_output
     def generate_wechat_summary(self, results: List[AnalysisResult]) -> str:
         """
         生成企业微信精简版日报（控制在4000字符内）
@@ -1576,6 +1600,7 @@ class NotificationService(
 
         return content
 
+    @_localized_report_output
     def generate_brief_report(
         self,
         results: List[AnalysisResult],
@@ -1638,6 +1663,7 @@ class NotificationService(
             lines.append(f"*{labels['analysis_model_label']}: {', '.join(models)}*")
         return "\n".join(lines)
 
+    @_localized_report_output
     def generate_single_stock_report(self, result: AnalysisResult) -> str:
         """
         生成单只股票的分析报告（用于单股推送模式 #55）

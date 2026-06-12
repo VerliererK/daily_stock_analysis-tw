@@ -3,10 +3,17 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, Dict, Optional
 
+logger = logging.getLogger(__name__)
+
 SUPPORTED_REPORT_LANGUAGES = ("zh", "en")
+
+# zh 的台湾繁体变体：内部基础语言仍为 zh（模板/分支逻辑不变），
+# 但 LLM prompt 与模板文案输出会按变体本地化为台湾繁体中文
+_TW_VARIANT_ALIASES = {"zh-tw", "zh_tw", "zh-hant", "zh_hant"}
 
 _REPORT_LANGUAGE_ALIASES = {
     "zh-cn": "zh",
@@ -15,6 +22,8 @@ _REPORT_LANGUAGE_ALIASES = {
     "zh_hans": "zh",
     "zh-tw": "zh",
     "zh_tw": "zh",
+    "zh-hant": "zh",
+    "zh_hant": "zh",
     "cn": "zh",
     "chinese": "zh",
     "english": "en",
@@ -26,27 +35,38 @@ _REPORT_LANGUAGE_ALIASES = {
 
 _OPERATION_ADVICE_CANONICAL_MAP = {
     "强烈买入": "strong_buy",
+    "強烈買入": "strong_buy",
     "strong buy": "strong_buy",
     "strong_buy": "strong_buy",
     "买入": "buy",
+    "買入": "buy",
     "buy": "buy",
     "加仓": "buy",
+    "加倉": "buy",
+    "加碼": "buy",
     "accumulate": "buy",
     "add position": "buy",
     "持有": "hold",
     "洗盘观察": "hold",
+    "洗盤觀察": "hold",
     "观察": "hold",
+    "觀察": "hold",
     "hold": "hold",
     "观望": "watch",
+    "觀望": "watch",
     "watch": "watch",
     "wait": "watch",
     "wait and see": "watch",
     "减仓": "reduce",
+    "減倉": "reduce",
+    "減碼": "reduce",
     "reduce": "reduce",
     "trim": "reduce",
     "卖出": "sell",
+    "賣出": "sell",
     "sell": "sell",
     "强烈卖出": "strong_sell",
+    "強烈賣出": "strong_sell",
     "strong sell": "strong_sell",
     "strong_sell": "strong_sell",
 }
@@ -63,19 +83,27 @@ _OPERATION_ADVICE_TRANSLATIONS = {
 
 _TREND_PREDICTION_CANONICAL_MAP = {
     "强势空头": "strong_bearish",
+    "強勢空頭": "strong_bearish",
     "强烈看多": "strong_bullish",
     "strong bullish": "strong_bullish",
     "very bullish": "strong_bullish",
     "强势多头": "strong_bullish",
+    "強勢多頭": "strong_bullish",
     "多头排列": "bullish",
+    "多頭排列": "bullish",
     "空头排列": "bearish",
+    "空頭排列": "bearish",
     "弱势多头": "bullish",
+    "弱勢多頭": "bullish",
     "弱势空头": "bearish",
+    "弱勢空頭": "bearish",
     "看多": "bullish",
     "盘整": "sideways",
+    "盤整": "sideways",
     "bullish": "bullish",
     "uptrend": "bullish",
     "震荡": "sideways",
+    "震盪": "sideways",
     "neutral": "sideways",
     "sideways": "sideways",
     "range-bound": "sideways",
@@ -133,6 +161,7 @@ _BIAS_STATUS_CANONICAL_MAP = {
     "警惕": "caution",
     "caution": "caution",
     "危险": "danger",
+    "危險": "danger",
     "risk": "danger",
     "danger": "danger",
 }
@@ -172,14 +201,21 @@ _CHIP_PLACEHOLDER_EXACT = {
     "unknown",
     "tbd",
     "数据缺失",
+    "數據缺失",
+    "資料缺失",
     "未知",
     "暂无",
+    "暫無",
     "待补充",
+    "待補充",
 }
 
 _CHIP_PLACEHOLDER_HINTS = (
     "数据缺失",
+    "數據缺失",
+    "資料缺失",
     "无法判断",
+    "無法判斷",
     "data unavailable",
     "unavailable",
     "not available",
@@ -421,10 +457,14 @@ _REPORT_LABELS: Dict[str, Dict[str, str]] = {
 _DECISION_INTENT_NEGATIONS = (
     "不",
     "并非",
+    "並非",
     "并未",
+    "並未",
     "未",
     "没有",
+    "沒有",
     "无",
+    "無",
     "不是",
     "no ",
     "not ",
@@ -434,18 +474,24 @@ _DECISION_INTENT_NEGATIONS = (
 _DECISION_INTENT_NEGATION_SCOPE_BREAK_CHARS = "，,。；;:!?！？"
 _DECISION_INTENT_NEGATION_CONNECTORS = (
     "建议",
-    "应",
+    "建議",
     "应当",
+    "應當",
+    "应",
+    "應",
     "宜",
     "先",
     "再",
-    "暂",
     "暂时",
-    "可",
+    "暫時",
+    "暂",
+    "暫",
     "可以",
+    "可",
     "需要",
     "需",
     "继续",
+    "繼續",
 )
 
 
@@ -472,6 +518,76 @@ def normalize_report_language(value: Optional[str], default: str = "zh") -> str:
     return default
 
 
+def get_report_language_variant(value: Optional[str]) -> Optional[str]:
+    """Return 'zh-tw' when the raw language value requests Taiwan Traditional Chinese."""
+    candidate = (value or "").strip().lower().replace(" ", "_").replace("-", "_")
+    if candidate in {alias.replace("-", "_") for alias in _TW_VARIANT_ALIASES}:
+        return "zh-tw"
+    return None
+
+
+_S2TWP_CONVERTER: Any = None
+_S2TWP_UNAVAILABLE = False
+
+
+def _get_s2twp_converter() -> Any:
+    """Lazily create the OpenCC s2twp converter (简体 -> 台湾繁体+台湾用语)."""
+    global _S2TWP_CONVERTER, _S2TWP_UNAVAILABLE
+    if _S2TWP_CONVERTER is not None or _S2TWP_UNAVAILABLE:
+        return _S2TWP_CONVERTER
+    try:
+        from opencc import OpenCC
+        _S2TWP_CONVERTER = OpenCC("s2twp")
+    except Exception as exc:  # pragma: no cover - depends on optional dependency
+        _S2TWP_UNAVAILABLE = True
+        logger.warning("OpenCC 不可用，zh-tw 模板文案将保持简体输出: %s", exc)
+    return _S2TWP_CONVERTER
+
+
+_ACTIVE_REPORT_LANGUAGE_VARIANT: Optional[str] = None
+
+
+def set_active_report_language_variant(variant: Optional[str]) -> None:
+    """Record the active language variant (called by config loading).
+
+    Push 模型：由 config 加载时写入，避免本模块反向依赖 config
+    （label getter 频繁调用，不能触发 get_config() 单例副作用）。
+    """
+    global _ACTIVE_REPORT_LANGUAGE_VARIANT
+    _ACTIVE_REPORT_LANGUAGE_VARIANT = variant if variant == "zh-tw" else None
+    _TW_LABELS_CACHE.clear()
+
+
+def get_active_report_language_variant() -> Optional[str]:
+    """Return the active report language variant ('zh-tw' or None)."""
+    return _ACTIVE_REPORT_LANGUAGE_VARIANT
+
+
+def apply_report_language_variant(text: Optional[str], variant: Optional[str] = "__active__") -> Optional[str]:
+    """Convert Simplified-Chinese template text per the active language variant.
+
+    With variant 'zh-tw' the text is converted to Taiwan Traditional Chinese
+    (including Taiwan phrasing via OpenCC s2twp); other variants return the
+    text unchanged. Conversion is idempotent for already-Traditional text.
+    """
+    if not text:
+        return text
+    if variant == "__active__":
+        variant = get_active_report_language_variant()
+    if variant != "zh-tw":
+        return text
+    converter = _get_s2twp_converter()
+    if converter is None:
+        return text
+    try:
+        converted = converter.convert(text)
+        # OpenCC 输出标准字「臺」，但现代台湾惯用「台」（台積電/台股/台灣），统一替换
+        return converted.replace("臺", "台")
+    except Exception as exc:
+        logger.debug("zh-tw 文案转换失败，保持原文: %s", exc)
+        return text
+
+
 def is_supported_report_language_value(value: Optional[str]) -> bool:
     """Return whether the raw value is a supported language code or alias."""
     candidate = (value or "").strip().lower().replace(" ", "_")
@@ -483,27 +599,48 @@ def is_supported_report_language_value(value: Optional[str]) -> bool:
 def get_report_labels(language: Optional[str]) -> Dict[str, str]:
     """Return UI copy for the selected report language."""
     normalized = normalize_report_language(language)
-    return _REPORT_LABELS[normalized]
+    labels = _REPORT_LABELS[normalized]
+    if normalized == "zh" and get_active_report_language_variant() == "zh-tw":
+        cached = _TW_LABELS_CACHE.get(normalized)
+        if cached is None:
+            cached = {
+                key: apply_report_language_variant(value, "zh-tw")
+                for key, value in labels.items()
+            }
+            _TW_LABELS_CACHE[normalized] = cached
+        return cached
+    return labels
+
+
+_TW_LABELS_CACHE: Dict[str, Dict[str, str]] = {}
 
 
 def get_placeholder_text(language: Optional[str]) -> str:
     """Return placeholder text for missing localized content."""
-    return _PLACEHOLDER_BY_LANGUAGE[normalize_report_language(language)]
+    return apply_report_language_variant(
+        _PLACEHOLDER_BY_LANGUAGE[normalize_report_language(language)]
+    )
 
 
 def get_unknown_text(language: Optional[str]) -> str:
     """Return localized unknown text."""
-    return _UNKNOWN_BY_LANGUAGE[normalize_report_language(language)]
+    return apply_report_language_variant(
+        _UNKNOWN_BY_LANGUAGE[normalize_report_language(language)]
+    )
 
 
 def get_no_data_text(language: Optional[str]) -> str:
     """Return localized data unavailable text."""
-    return _NO_DATA_BY_LANGUAGE[normalize_report_language(language)]
+    return apply_report_language_variant(
+        _NO_DATA_BY_LANGUAGE[normalize_report_language(language)]
+    )
 
 
 def get_chip_unavailable_text(language: Optional[str]) -> str:
     """Return the localized one-line chip distribution fallback text."""
-    return _CHIP_UNAVAILABLE_BY_LANGUAGE[normalize_report_language(language)]
+    return apply_report_language_variant(
+        _CHIP_UNAVAILABLE_BY_LANGUAGE[normalize_report_language(language)]
+    )
 
 
 def _normalize_lookup_key(value: Any) -> str:
@@ -585,7 +722,7 @@ def _is_placeholder_stock_name(value: Any, code: Any = None) -> bool:
     lowered = text.lower()
     if lowered in {"n/a", "na", "none", "null", "unknown"}:
         return True
-    if text in {"-", "—", "未知", "待补充"}:
+    if text in {"-", "—", "未知", "待补充", "待補充"}:
         return True
 
     code_text = str(code or "").strip()
@@ -609,7 +746,7 @@ def _translate_from_map(
 
     canonical = _canonicalize_lookup_value(raw_text, canonical_map)
     if canonical:
-        return translations[canonical][normalized_language]
+        return apply_report_language_variant(translations[canonical][normalized_language])
     return raw_text
 
 
@@ -800,7 +937,9 @@ def get_localized_stock_name(value: Any, code: Any, language: Optional[str]) -> 
     raw_text = str(value or "").strip()
     if not _is_placeholder_stock_name(raw_text, code):
         return raw_text
-    return _GENERIC_STOCK_NAME_BY_LANGUAGE[normalize_report_language(language)]
+    return apply_report_language_variant(
+        _GENERIC_STOCK_NAME_BY_LANGUAGE[normalize_report_language(language)]
+    )
 
 
 def get_sentiment_label(score: int, language: Optional[str]) -> str:
@@ -818,11 +957,11 @@ def get_sentiment_label(score: int, language: Optional[str]) -> str:
         return "Very Bearish"
 
     if score >= 80:
-        return "极度乐观"
+        return apply_report_language_variant("极度乐观")
     if score >= 60:
-        return "乐观"
+        return apply_report_language_variant("乐观")
     if score >= 40:
         return "中性"
     if score >= 20:
-        return "悲观"
-    return "极度悲观"
+        return apply_report_language_variant("悲观")
+    return apply_report_language_variant("极度悲观")

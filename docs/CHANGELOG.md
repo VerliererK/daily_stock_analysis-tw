@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [新功能] 新增台股（TW）市场支持：FinMind 为主数据源（日线/实时快照/股票名称，免 token 可用，可配 `FINMIND_TOKEN` 提升限额）、Yfinance `.TW`/`.TWO` 兜底；代码约定 `tw2330` / `2330.TW` / 裸 4 位数字视为台股，5 位纯数字维持港股判定；同步扩展市场判别、交易日历（XTAI）、台股 prompt 守则与持仓/决策信号 `market` 枚举。
 - [修复] 台股股票名称优先取 FinMind 中文名（台積電），避免实时行情 fallback 到 Yfinance 时英文名占用缓存。
 - [修复] 日志 formatter 兼容解释器关闭阶段的延迟 import 失败，并默认降级 httpcore debug 噪音，消除任务结束后的 "--- Logging error ---" 输出。
+- [新功能] `REPORT_LANGUAGE=zh-tw` 支持台湾繁体中文报告：LLM 经 prompt 指示原生输出台湾繁体与台湾金融用语（本益比、殖利率、法人买卖超），模板文案经 OpenCC s2twp 兜底转换（臺→台 归一），operation_advice/trend 等语义解析新增繁体词别名；内部基础语言仍为 zh，对 zh/en 用户零行为变化。
 
 ## [3.21.0] - 2026-06-07
 
