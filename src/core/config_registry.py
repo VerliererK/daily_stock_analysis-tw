@@ -2158,7 +2158,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     },
     "REPORT_LANGUAGE": {
         "title": "Report Language",
-        "description": "Default output language for reports and notification templates. Supported values: zh, en.",
+        "description": "Default output language for reports and notification templates. Supported values: zh, en, zh-tw (Taiwan Traditional Chinese).",
         "category": "notification",
         "data_type": "string",
         "ui_control": "select",
@@ -2169,13 +2169,15 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [
             {"label": "Chinese", "value": "zh"},
             {"label": "English", "value": "en"},
+            {"label": "Chinese (Taiwan)", "value": "zh-tw"},
         ],
-        "validation": {"enum": ["zh", "en"]},
+        "validation": {"enum": ["zh", "en", "zh-tw"]},
         "display_order": 56,
         "help_key": "settings.notification.report_output",
         "examples": [
             "REPORT_LANGUAGE=zh",
             "REPORT_LANGUAGE=en",
+            "REPORT_LANGUAGE=zh-tw",
         ],
         "docs": [
             {
@@ -2995,7 +2997,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     },
     "MARKET_REVIEW_REGION": {
         "title": "Market Review Region",
-        "description": "Market region for review: cn (A-shares), hk (Hong Kong), us (US stocks), or both (all markets).",
+        "description": "Market region for review: cn (A-shares), hk (Hong Kong), us (US stocks), tw (Taiwan), or both (all markets).",
         "category": "system",
         "data_type": "string",
         "ui_control": "select",
@@ -3003,12 +3005,13 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "is_required": False,
         "is_editable": True,
         "default_value": "cn",
-        "options": ["cn", "hk", "us", "both"],
-        "validation": {"enum": ["cn", "hk", "us", "both"]},
+        "options": ["cn", "hk", "us", "tw", "both"],
+        "validation": {"enum": ["cn", "hk", "us", "tw", "both"]},
         "display_order": 47,
         "help_key": "settings.system.market_review",
         "examples": [
             "MARKET_REVIEW_REGION=cn",
+            "MARKET_REVIEW_REGION=tw",
             "MARKET_REVIEW_REGION=both",
         ],
         "docs": [
