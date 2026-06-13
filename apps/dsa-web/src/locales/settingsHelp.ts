@@ -16,7 +16,7 @@ const settingsHelpZhCN: SettingsHelpMap = {
   'settings.base.STOCK_LIST': {
     title: '自选股列表',
     summary: '配置需要分析的股票代码列表，是手动分析、定时任务和通知报告的基础输入。',
-    usage: '多个股票代码使用英文逗号分隔。A 股可直接填写 6 位代码，港股可使用 hk 前缀，美股可填写 ticker。',
+    usage: '多个股票代码使用英文逗号分隔。A 股可直接填写 6 位代码，港股可使用 hk 前缀，美股可填写 ticker，台股可填 2330.TW 或裸 4 位代码。',
     valueNotes: [
       '定时模式每次触发前会重新读取当前保存的 STOCK_LIST。',
       '如果命令行临时传入 --stocks，只影响本次手动运行，不会锁定后续计划任务。',
@@ -410,7 +410,7 @@ const settingsHelpZhCN: SettingsHelpMap = {
   'settings.notification.report_output': {
     title: '报告输出设置',
     summary: '控制通知报告的详细程度、语言和模板输出。',
-    usage: 'REPORT_TYPE 可选 simple/full/brief，REPORT_LANGUAGE 可选 zh/en。',
+    usage: 'REPORT_TYPE 可选 simple/full/brief，REPORT_LANGUAGE 可选 zh/en/zh-tw（台湾繁体）。',
     valueNotes: ['报告语言影响默认模板和通知文案，不等同于前端界面语言。'],
     impact: ['影响通知正文长度、语言和阅读体验。'],
     notes: ['full 报告可能更长，部分平台可能触发分段发送。'],
@@ -1018,7 +1018,7 @@ const settingsHelpZhCN: SettingsHelpMap = {
     summary: '控制大盘分析功能的开关、覆盖市场和配色方案。',
     usage: 'MARKET_REVIEW_ENABLED 开启大盘分析；MARKET_REVIEW_REGION 选择市场（cn/hk/us/both）；MARKET_REVIEW_COLOR_SCHEME 选择配色。',
     valueNotes: [
-      'cn 覆盖 A 股，hk 覆盖港股，us 覆盖美股，both 覆盖全部。',
+      'cn 覆盖 A 股，hk 覆盖港股，us 覆盖美股，tw 覆盖台股，both 覆盖全部。',
       '配色方案影响大盘报告中指数涨跌的颜色显示：green_up 为绿涨红跌，red_up 为红涨绿跌。',
     ],
     impact: ['影响分析报告中大盘概览部分的内容和视觉呈现。'],
@@ -1383,7 +1383,7 @@ const settingsHelpEnUS: SettingsHelpMap = {
   'settings.notification.report_output': {
     title: 'Report Output',
     summary: 'Controls notification detail level, language, and template output.',
-    usage: 'REPORT_TYPE supports simple/full/brief. REPORT_LANGUAGE supports zh/en.',
+    usage: 'REPORT_TYPE supports simple/full/brief. REPORT_LANGUAGE supports zh/en/zh-tw (Taiwan Traditional Chinese).',
     valueNotes: ['Report language affects default report and notification text, not the Web UI language.'],
     impact: ['Affects notification length, language, and readability.'],
     notes: ['Full reports can be long and may be split by some platforms.'],
