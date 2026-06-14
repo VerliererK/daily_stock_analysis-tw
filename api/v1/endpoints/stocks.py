@@ -81,6 +81,10 @@ _STOCK_CODE_RE = re.compile(
     r"|\d{1,5}\.HK"                           # HK suffix format
     r"|HK\d{1,5}"                             # HK prefix format
     r"|\d{5}"                                 # bare 5-digit HK code
+    # TW formats — mirror data_provider/tw_market.py _extract_tw_body (body = \d{4,6}[A-Z]{0,2})
+    r"|\d{4,6}[A-Z]{0,2}\.TWO?"               # TW suffix: 2330.TW / 6488.TWO / 00675L.TW
+    r"|TW\d{4,6}[A-Z]{0,2}"                   # TW prefix: TW2330 / TW00878
+    r"|\d{4}"                                 # bare 4-digit TW code: 2330 / 0050
     r"|[A-Z]{1,5}(?:\.(?:US|[A-Z]))?"         # US ticker
     r")$",
     re.IGNORECASE,

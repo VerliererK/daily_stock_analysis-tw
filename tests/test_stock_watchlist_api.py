@@ -64,3 +64,29 @@ def test_watchlist_matching_is_case_insensitive_for_us_tickers() -> None:
     assert add_response.stock_codes == ["aapl"]
     assert remove_response.stock_codes == []
     assert service.update_calls == [""]
+
+
+def test_watchlist_add_accepts_taiwan_code_variants() -> None:
+    # TW codes were previously rejected as "invalid format"; all canonical forms must be accepted.
+    for code in ("2330.TW", "6488.TWO", "TW2330", "2330"):
+        service = FakeSystemConfigService("600519")
+
+        response = add_to_watchlist(
+            WatchlistRequest(stock_code=code),
+            service=service,
+        )
+
+        assert code in response.stock_codes, f"{code} should be accepted"
+
+
+def test_watchlist_deduplicates_taiwan_variants() -> None:
+    service = FakeSystemConfigService("TW2330")
+
+    response = add_to_watchlist(
+        WatchlistRequest(stock_code="2330.TW"),
+        service=service,
+    )
+
+    assert response.stock_codes == ["TW2330"]
+    assert service.update_calls == []
+

@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [修复] Web 股票代码校验补齐台股格式（`2330.TW` / `6488.TWO` / `TW2330` / 裸 4 位 `2330`），比照后端 `tw_market` 契约；个股分析与单标的告警入口不再把台股代码判为「格式不正确」。
 - [新功能] Web 设置页可选台股：`MARKET_REVIEW_REGION` 增加 `tw`（台股）、`REPORT_LANGUAGE` 增加 `zh-tw`（台湾繁体中文）选项与中英文标签，后端 config registry 同步扩展 options/enum；存档经 reload 即时生效（逗号组合如 `tw,us` 仍维持 env-only）。
 - [改进] Web 设置页帮助文案补齐台股：股票代码输入、`REPORT_LANGUAGE`、`MARKET_REVIEW_REGION` 的中英文说明同步 tw / zh-tw；股票建议徽章新增台股（防御性，避免未来出现 TW 建议时抛错）。
+- [修复] 自选股增删 API（`/api/v1/stocks/watchlist/add`、`/remove`）的后端代码校验补齐台股格式（`2330.TW` / `6488.TWO` / `TW2330` / 裸 4 位 `2330`），比照 `tw_market` 契约；此前后端 `_STOCK_CODE_RE` 仅含 A 股/港股/美股，导致台股加入自选被判「不是合法的股票代码格式」。dedup/移除沿用既有 canonical 归一（各形式归一为 `TW2330`）。
 
 ## [3.21.0] - 2026-06-07
 
