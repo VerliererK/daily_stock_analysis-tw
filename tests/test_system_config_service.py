@@ -1120,6 +1120,12 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertTrue(validation["valid"])
         self.assertEqual(validation["issues"], [])
 
+    def test_validate_accepts_market_review_region_combo(self) -> None:
+        validation = self.service.validate(items=[{"key": "MARKET_REVIEW_REGION", "value": "tw,us"}])
+
+        self.assertTrue(validation["valid"])
+        self.assertEqual(validation["issues"], [])
+
     def test_validate_accepts_blank_context_compression_preset_fields(self) -> None:
         validation = self.service.validate(
             items=[

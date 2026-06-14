@@ -386,6 +386,10 @@ const fieldOptionLabelMap: Record<string, Record<string, string>> = {
     hk: '港股',
     us: '美股',
     tw: '台股',
+    'cn,hk': 'A 股+港股',
+    'hk,us': '港股+美股',
+    'tw,us': '台股+美股',
+    'cn,hk,us': 'A 股+港股+美股',
     both: '全部市场',
   },
   AGENT_ARCH: {
@@ -453,6 +457,10 @@ const fieldOptionLabelMapEn: Record<string, Record<string, string>> = {
     hk: 'Hong Kong',
     us: 'US',
     tw: 'Taiwan',
+    'cn,hk': 'A-shares + Hong Kong',
+    'hk,us': 'Hong Kong + US',
+    'tw,us': 'Taiwan + US',
+    'cn,hk,us': 'A-shares + Hong Kong + US',
     both: 'All markets',
   },
   AGENT_ARCH: {
