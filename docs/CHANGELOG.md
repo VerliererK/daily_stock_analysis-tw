@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [修复] 自选股增删 API（`/api/v1/stocks/watchlist/add`、`/remove`）的后端代码校验补齐台股格式（`2330.TW` / `6488.TWO` / `TW2330` / 裸 4 位 `2330`），比照 `tw_market` 契约；此前后端 `_STOCK_CODE_RE` 仅含 A 股/港股/美股，导致台股加入自选被判「不是合法的股票代码格式」。dedup/移除沿用既有 canonical 归一（各形式归一为 `TW2330`）。
 - [修复] Docker：将 WebUI/管理员认证写回的 `.env` 指向持久化的 data volume（compose 新增 `ENV_FILE=/app/data/.env`），修复每次 `up --build` / recreate 后 `ADMIN_AUTH_ENABLED` 归零、需重新设置密码的问题（此前写入容器临时层 `/app/.env` 会随容器重建丢失；密码 hash 本就在 `data/` 持久化）。
 - [改进] Web 设置页大盘复盘市场（`MARKET_REVIEW_REGION`）新增常用多市场组合选项（`cn,hk` / `hk,us` / `tw,us` / `cn,hk,us`），可直接选「台股+美股」等组合而不必选含 A 股的「全部市场」；逗号组合后端早已支持（`_resolve_market_review_regions`），此前 Web 单选下拉仅能选单一市场或 both。registry options/enum 与中英文标签同步扩展。
+- [修复] `REPORT_LANGUAGE=zh-tw` 时大盘复盘报告仍输出简体（个股分析已转繁体、大盘复盘漏接）：在 `_render_market_review_payload_markdown` 出口统一套 OpenCC s2twp 兜底转换，覆盖存档/历史/Web/推送四条出口；zh/en 等其他语言原样返回（幂等）。
 
 ## [3.21.0] - 2026-06-07
 

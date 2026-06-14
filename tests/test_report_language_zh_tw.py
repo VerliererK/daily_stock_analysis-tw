@@ -187,5 +187,33 @@ class TestPromptLanguageSections(unittest.TestCase):
         self.assertNotIn('台灣繁體中文', section)
 
 
+class TestMarketReviewMarkdownVariant(unittest.TestCase):
+    """大盘复盘 Markdown 出口在 zh-tw 下兜底转繁体（覆盖存档/历史/推送三路径）。"""
+
+    def tearDown(self):
+        rl.set_active_report_language_variant(None)
+
+    @staticmethod
+    def _payload():
+        return {
+            "markets": {"us": {}},
+            "markdown_report": "板块与宽度数据缺失，无法判断普涨强度",
+        }
+
+    def test_converts_to_traditional_under_zh_tw(self):
+        from src.core.market_review import _render_market_review_payload_markdown
+        rl.set_active_report_language_variant('zh-tw')
+        out = _render_market_review_payload_markdown(self._payload())
+        self.assertIn('板塊與寬度', out)
+        self.assertNotIn('板块', out)
+
+    def test_keeps_simplified_when_variant_inactive(self):
+        from src.core.market_review import _render_market_review_payload_markdown
+        rl.set_active_report_language_variant(None)
+        out = _render_market_review_payload_markdown(self._payload())
+        self.assertIn('板块与宽度', out)
+        self.assertNotIn('板塊', out)
+
+
 if __name__ == '__main__':
     unittest.main()

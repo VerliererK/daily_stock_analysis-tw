@@ -19,7 +19,7 @@ import uuid
 from src.config import get_config
 from src.notification import NotificationService
 from src.market_analyzer import MarketAnalyzer
-from src.report_language import normalize_report_language
+from src.report_language import apply_report_language_variant, normalize_report_language
 from src.search_service import SearchService
 from src.analyzer import AnalysisResult, GeminiAnalyzer
 
@@ -357,8 +357,12 @@ def _render_market_review_payload_markdown(
     """Render Markdown from the structured market-review payload for file/push compatibility."""
     body = _render_market_review_payload_body(payload)
     if wrapper_title:
-        return f"{wrapper_title}\n\n{body}".strip()
-    return body.strip()
+        rendered = f"{wrapper_title}\n\n{body}".strip()
+    else:
+        rendered = body.strip()
+    # REPORT_LANGUAGE=zh-tw 时将大盘复盘文案兜底转为台湾繁体（幂等；其他语言原样返回）。
+    # 大盘复盘 LLM 文案未经 prompt 强制繁体，统一在此出口转换，覆盖存档/历史/推送三条路径。
+    return apply_report_language_variant(rendered)
 
 
 def _render_market_review_payload_body(payload: Dict[str, Any]) -> str:
