@@ -210,6 +210,63 @@ class FinMindFetcher(BaseFetcher):
             logger.debug(f"[FinMind] 获取 {dataset}({stock_id}) 失败: {e}")
             return []
 
+    def get_tw_market_institutional_summary(self) -> Optional[Dict[str, Any]]:
+        """汇总台股【全市场】三大法人买卖超（亿元），供大盘复盘使用。
+
+        使用 TaiwanStockTotalInstitutionalInvestors（免 token 可用、无需 data_id，
+        与个股 TaiwanStockInstitutionalInvestorsBuySell 不同，后者已转赞助等级）。
+        取最近一个交易日的外资/投信/自营商净买卖超。
+
+        Returns:
+            {'date', 'foreign_net', 'trust_net', 'dealer_net', 'total_net'}
+            单位：亿元（正值为买超）；无数据时返回 None（fail-soft）。
+        """
+        from datetime import datetime, timedelta
+        start_date = (datetime.now() - timedelta(days=14)).strftime('%Y-%m-%d')
+        try:
+            self.random_sleep(0.3, 0.8)
+            data = self._request({
+                'dataset': 'TaiwanStockTotalInstitutionalInvestors',
+                'start_date': start_date,
+            })
+            rows = data.get('data') or []
+        except Exception as e:
+            logger.debug(f"[FinMind] 获取全市场三大法人失败: {e}")
+            return None
+        if not rows:
+            return None
+
+        latest_date = sorted({r['date'] for r in rows})[-1]
+        group_of = {
+            'Foreign_Investor': 'foreign',
+            'Foreign_Dealer_Self': 'foreign',
+            'Investment_Trust': 'trust',
+            'Dealer_self': 'dealer',
+            'Dealer_Hedging': 'dealer',
+        }
+        net = {'foreign': 0.0, 'trust': 0.0, 'dealer': 0.0}
+        total_net: Optional[float] = None
+        for r in rows:
+            if r.get('date') != latest_date:
+                continue
+            delta = (r.get('buy') or 0) - (r.get('sell') or 0)
+            if r.get('name') == 'total':
+                total_net = delta
+            group = group_of.get(r.get('name'))
+            if group is not None:
+                net[group] += delta
+        if total_net is None:
+            total_net = net['foreign'] + net['trust'] + net['dealer']
+
+        yi = 1e8  # 元 -> 亿元
+        return {
+            'date': latest_date,
+            'foreign_net': round(net['foreign'] / yi, 1),
+            'trust_net': round(net['trust'] / yi, 1),
+            'dealer_net': round(net['dealer'] / yi, 1),
+            'total_net': round(total_net / yi, 1),
+        }
+
     def get_tw_chip_summary(self, stock_code: str, days: int = 5) -> Optional[Dict[str, Any]]:
         """汇总台股筹码面数据，供 LLM 分析上下文使用。
 

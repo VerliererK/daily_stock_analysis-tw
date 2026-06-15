@@ -331,6 +331,58 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
             }
         return mapping[mood_key]
 
+    def _fetch_usdtwd_rate(self) -> Optional[float]:
+        """美元/台币汇率（yfinance USDTWD=X，fail-soft）。"""
+        try:
+            import yfinance as yf
+            hist = yf.Ticker("USDTWD=X").history(period="5d")
+            if hist is not None and not hist.empty:
+                return round(float(hist["Close"].iloc[-1]), 3)
+        except Exception as e:
+            logger.debug("[大盘] %s action=fetch_usdtwd status=error err=%s", self._log_context(), e)
+        return None
+
+    def _build_tw_market_chips_block(self, review_language: str) -> str:
+        """台股大盘：全市场三大法人买卖超 + 美元/台币汇率（fail-soft，仅 region=tw）。
+
+        台股 blueprint 提示 LLM 讨论三大法人/汇率，但主流程原本未注入数据，
+        导致 LLM 反复声明“缺乏资料”。此处补上实际数据；抓取失败则回空串、行为不变。
+        """
+        if self.region != "tw":
+            return ""
+        inst = None
+        try:
+            from data_provider.finmind_fetcher import FinMindFetcher
+            inst = FinMindFetcher().get_tw_market_institutional_summary()
+        except Exception as e:
+            logger.debug("[大盘] %s action=tw_market_institutional status=error err=%s", self._log_context(), e)
+        fx = self._fetch_usdtwd_rate()
+        if not inst and fx is None:
+            return ""
+
+        if review_language == "en":
+            lines = []
+            if inst:
+                lines.append(
+                    f"- Institutional net (whole market, {inst['date']}, NT$100M, + = net buy): "
+                    f"Foreign {inst['foreign_net']:+.1f}, Trust {inst['trust_net']:+.1f}, "
+                    f"Dealer {inst['dealer_net']:+.1f}, Total {inst['total_net']:+.1f}"
+                )
+            if fx is not None:
+                lines.append(f"- USD/TWD: {fx:.2f}")
+            return "## Market Capital Flows\n" + "\n".join(lines)
+
+        lines = []
+        if inst:
+            lines.append(
+                f"- 三大法人买卖超（全市场，{inst['date']}，亿元，正为买超）："
+                f"外资 {inst['foreign_net']:+.1f}、投信 {inst['trust_net']:+.1f}、"
+                f"自营商 {inst['dealer_net']:+.1f}、合计 {inst['total_net']:+.1f}"
+            )
+        if fx is not None:
+            lines.append(f"- 美元/台币汇率：{fx:.2f}")
+        return "## 市场资金（全市场）\n" + "\n".join(lines)
+
     def get_market_overview(self) -> MarketOverview:
         """
         获取市场概览数据
@@ -1166,6 +1218,9 @@ Lagging: {bottom_sectors_text if bottom_sectors_text else "N/A"}"""
             else:
                 sector_block = "## 板块表现\n（该市场暂无板块涨跌数据）"
 
+        # 台股大盘：注入全市场三大法人买卖超 + 美元/台币汇率（其他市场为空串）
+        tw_chips_block = self._build_tw_market_chips_block(review_language)
+
         data_no_indices_hint = (
             "注意：由于行情数据获取失败，请主要根据【市场新闻】进行定性分析和总结，不要编造具体的指数点位。"
             if not indices_text
@@ -1207,6 +1262,8 @@ Lagging: {bottom_sectors_text if bottom_sectors_text else "N/A"}"""
 {stats_block}
 
 {sector_block}
+
+{tw_chips_block}
 
 ## Market News
 {news_placeholder}
@@ -1271,6 +1328,8 @@ Output the report content directly, no extra commentary.
 {stats_block}
 
 {sector_block}
+
+{tw_chips_block}
 
 ## 市场新闻
 {news_placeholder}

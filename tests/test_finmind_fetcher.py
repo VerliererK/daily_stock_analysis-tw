@@ -314,5 +314,45 @@ class TestFinMindFetcherRegistration(unittest.TestCase):
         self.assertLess(names.index('FinMindFetcher'), names.index('YfinanceFetcher'))
 
 
+class TestFinMindMarketInstitutional(unittest.TestCase):
+    """全市场三大法人汇总（大盘复盘用，TaiwanStockTotalInstitutionalInvestors）。"""
+
+    def setUp(self):
+        from data_provider.finmind_fetcher import FinMindFetcher
+        self.fetcher = FinMindFetcher()
+
+    @patch('data_provider.finmind_fetcher.requests.get')
+    def test_market_institutional_summary_parsing(self, mock_get):
+        e8 = 100_000_000
+        rows = [
+            {'date': '2026-06-11', 'name': 'Foreign_Investor', 'buy': 100 * e8, 'sell': 100 * e8},
+            {'date': '2026-06-12', 'name': 'Foreign_Investor', 'buy': 300 * e8, 'sell': 100 * e8},
+            {'date': '2026-06-12', 'name': 'Foreign_Dealer_Self', 'buy': 0, 'sell': 0},
+            {'date': '2026-06-12', 'name': 'Investment_Trust', 'buy': 50 * e8, 'sell': 20 * e8},
+            {'date': '2026-06-12', 'name': 'Dealer_self', 'buy': 10 * e8, 'sell': 5 * e8},
+            {'date': '2026-06-12', 'name': 'Dealer_Hedging', 'buy': 20 * e8, 'sell': 12 * e8},
+            {'date': '2026-06-12', 'name': 'total', 'buy': 380 * e8, 'sell': 137 * e8},
+        ]
+        mock_get.return_value = _make_mock_response({'status': 200, 'msg': 'success', 'data': rows})
+
+        summary = self.fetcher.get_tw_market_institutional_summary()
+
+        self.assertIsNotNone(summary)
+        self.assertEqual(summary['date'], '2026-06-12')   # 仅取最新交易日
+        self.assertEqual(summary['foreign_net'], 200.0)
+        self.assertEqual(summary['trust_net'], 30.0)
+        self.assertEqual(summary['dealer_net'], 13.0)     # self +5 + hedging +8
+        self.assertEqual(summary['total_net'], 243.0)
+        # 全市场数据集不带 data_id
+        _, kwargs = mock_get.call_args
+        self.assertNotIn('data_id', kwargs['params'])
+        self.assertEqual(kwargs['params']['dataset'], 'TaiwanStockTotalInstitutionalInvestors')
+
+    @patch('data_provider.finmind_fetcher.requests.get')
+    def test_market_institutional_summary_empty_is_none(self, mock_get):
+        mock_get.return_value = _make_mock_response({'status': 200, 'msg': 'success', 'data': []})
+        self.assertIsNone(self.fetcher.get_tw_market_institutional_summary())
+
+
 if __name__ == '__main__':
     unittest.main()
