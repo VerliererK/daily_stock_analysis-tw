@@ -1558,6 +1558,16 @@ class SystemConfigService:
                 )
             )
 
+        if "SCHEDULE_MAX_CONSECUTIVE_FAILURES" in submitted_keys:
+            failures = (current_map.get("SCHEDULE_MAX_CONSECUTIVE_FAILURES", "") or "2").strip() or "2"
+            warnings.append(
+                (
+                    f"SCHEDULE_MAX_CONSECUTIVE_FAILURES={failures} 已写入 .env。"
+                    "已运行的 schedule 模式会在下一次任务前读取新的连续失败门槛；"
+                    "若当前已经被失败保护暂停，修改该值不会自动恢复，请先修复问题并删除 scheduler_failure_guard.json。"
+                )
+            )
+
         startup_only_bind_keys = submitted_keys & {
             "WEBUI_HOST",
             "WEBUI_PORT",

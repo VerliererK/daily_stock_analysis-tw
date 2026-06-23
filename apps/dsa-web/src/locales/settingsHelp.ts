@@ -511,16 +511,18 @@ const settingsHelpZhCN: SettingsHelpMap = {
   'settings.system.schedule': {
     title: '定时任务',
     summary: '控制是否启用每日定时分析以及启动时是否立即执行一次。',
-    usage: 'SCHEDULE_TIME 使用 HH:MM 24 小时格式；SCHEDULE_ENABLED 和 SCHEDULE_RUN_IMMEDIATELY 控制定时模式启动行为。',
+    usage: 'SCHEDULE_TIME 使用 HH:MM 24 小时格式；SCHEDULE_ENABLED 和 SCHEDULE_RUN_IMMEDIATELY 控制定时模式启动行为；SCHEDULE_MAX_CONSECUTIVE_FAILURES 控制连续失败保护阈值。',
     valueNotes: [
       '已运行的 schedule 模式会在下一轮调度检查中读取新的 SCHEDULE_TIME 并重建 daily job。',
       'SCHEDULE_ENABLED 和 SCHEDULE_RUN_IMMEDIATELY 属于启动期行为，保存后不会启动、停止或重建当前 scheduler。',
       '定时任务触发时会读取当前保存的 STOCK_LIST。',
+      '连续完整失败达到 SCHEDULE_MAX_CONSECUTIVE_FAILURES 后，会暂停后续自动分析以保护搜索和 LLM API 额度。',
     ],
-    impact: ['影响 schedule 模式下自动分析频率、启动行为和通知推送时间。'],
+    impact: ['影响 schedule 模式下自动分析频率、启动行为、失败保护和通知推送时间。'],
     notes: [
       '注意运行环境时区，容器和服务器时区可能与本地不同。',
       '若当前进程未以 schedule 模式启动，保存这些字段不会自动创建调度器。',
+      '失败保护状态保存在 DATABASE_PATH 同目录下的 scheduler_failure_guard.json；修复问题后删除该文件可恢复自动分析。',
     ],
   },
   'settings.system.RUN_IMMEDIATELY': {
@@ -1476,16 +1478,18 @@ const settingsHelpEnUS: SettingsHelpMap = {
   'settings.system.schedule': {
     title: 'Schedule',
     summary: 'Controls daily scheduled analysis and whether startup runs immediately.',
-    usage: 'SCHEDULE_TIME uses HH:MM 24-hour format. SCHEDULE_ENABLED and SCHEDULE_RUN_IMMEDIATELY control schedule-mode startup behavior.',
+    usage: 'SCHEDULE_TIME uses HH:MM 24-hour format. SCHEDULE_ENABLED and SCHEDULE_RUN_IMMEDIATELY control schedule-mode startup behavior. SCHEDULE_MAX_CONSECUTIVE_FAILURES controls the consecutive-failure guard threshold.',
     valueNotes: [
       'An already-running schedule mode reads a new SCHEDULE_TIME on the next scheduler check and rebuilds the daily job.',
       'SCHEDULE_ENABLED and SCHEDULE_RUN_IMMEDIATELY are startup-time settings; saving them does not start, stop, or rebuild the current scheduler.',
       'Scheduled runs read the currently saved STOCK_LIST.',
+      'After SCHEDULE_MAX_CONSECUTIVE_FAILURES consecutive full-run failures, scheduled analysis pauses to protect search and LLM API quota.',
     ],
-    impact: ['Affects automatic analysis frequency, startup behavior, and notification timing in schedule mode.'],
+    impact: ['Affects automatic analysis frequency, startup behavior, failure protection, and notification timing in schedule mode.'],
     notes: [
       'Check the runtime timezone, especially in containers and servers.',
       'If the current process was not started in schedule mode, saving these fields will not create a scheduler.',
+      'The guard state is saved as scheduler_failure_guard.json next to DATABASE_PATH. Delete that file after fixing the issue to resume scheduled analysis.',
     ],
   },
   'settings.system.RUN_IMMEDIATELY': {

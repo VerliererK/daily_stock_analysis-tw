@@ -2943,6 +2943,32 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "warning_codes": ["restart_required"],
     },
+    "SCHEDULE_MAX_CONSECUTIVE_FAILURES": {
+        "title": "Schedule Max Consecutive Failures",
+        "description": "Pause scheduled analysis after this many consecutive full-run failures.",
+        "category": "system",
+        "data_type": "integer",
+        "ui_control": "number",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "2",
+        "options": [],
+        "validation": {"min": 1},
+        "display_order": 12,
+        "help_key": "settings.system.schedule",
+        "examples": [
+            "SCHEDULE_MAX_CONSECUTIVE_FAILURES=2",
+            "SCHEDULE_MAX_CONSECUTIVE_FAILURES=1",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：其他配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#其他配置",
+            },
+        ],
+        "warning_codes": [],
+    },
     "TRADING_DAY_CHECK_ENABLED": {
         "title": "Trading Day Check",
         "description": "Skip analysis on non-trading days. Set to false or use --force-run to override.",

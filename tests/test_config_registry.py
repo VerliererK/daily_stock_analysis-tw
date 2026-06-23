@@ -337,6 +337,12 @@ class TestSettingsHelpMetadata(unittest.TestCase):
         schedule_time = get_field_definition("SCHEDULE_TIME")
         self.assertNotIn("restart_required", schedule_time.get("warning_codes", []))
 
+        schedule_failure_guard = get_field_definition("SCHEDULE_MAX_CONSECUTIVE_FAILURES")
+        self.assertEqual(schedule_failure_guard["category"], "system")
+        self.assertEqual(schedule_failure_guard["data_type"], "integer")
+        self.assertEqual(schedule_failure_guard["default_value"], "2")
+        self.assertNotIn("restart_required", schedule_failure_guard.get("warning_codes", []))
+
     def test_schema_response_includes_help_metadata(self):
         schema = build_schema_response()
         fields = {

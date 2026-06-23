@@ -2681,6 +2681,24 @@ class SystemConfigServiceTestCase(unittest.TestCase):
             response["warnings"],
         )
 
+    def test_update_appends_schedule_failure_guard_warning(self) -> None:
+        response = self.service.update(
+            config_version=self.manager.get_config_version(),
+            items=[{"key": "SCHEDULE_MAX_CONSECUTIVE_FAILURES", "value": "3"}],
+            reload_now=True,
+        )
+
+        self.assertTrue(response["success"])
+        guard_warning = next(
+            warning
+            for warning in response["warnings"]
+            if "SCHEDULE_MAX_CONSECUTIVE_FAILURES=3 已写入 .env" in warning
+        )
+
+        self.assertIn("下一次任务前读取", guard_warning)
+        self.assertIn("scheduler_failure_guard.json", guard_warning)
+        self.assertIn("不会自动恢复", guard_warning)
+
     def test_update_appends_webui_bind_restart_warning(self) -> None:
         response = self.service.update(
             config_version=self.manager.get_config_version(),

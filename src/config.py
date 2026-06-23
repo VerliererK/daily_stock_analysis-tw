@@ -900,6 +900,7 @@ class Config:
     schedule_enabled: bool = False            # 是否启用定时任务
     schedule_time: str = "18:00"              # 每日推送时间（HH:MM 格式）
     schedule_run_immediately: bool = True     # 启动时是否立即执行一次
+    schedule_max_consecutive_failures: int = 2  # 连续失败达到该次数后暂停自动分析
     run_immediately: bool = True              # 启动时是否立即执行一次（非定时模式）
     market_review_enabled: bool = True        # 是否启用大盘复盘
     # 大盘复盘市场区域：cn(A股)、hk(港股)、us(美股)、both(三市场)，us 适合仅关注美股的用户
@@ -1709,6 +1710,12 @@ class Config:
             ).lower() == 'true',
             schedule_time=(schedule_time_value or '18:00').strip() or '18:00',
             schedule_run_immediately=schedule_run_immediately,
+            schedule_max_consecutive_failures=parse_env_int(
+                os.getenv('SCHEDULE_MAX_CONSECUTIVE_FAILURES'),
+                2,
+                field_name='SCHEDULE_MAX_CONSECUTIVE_FAILURES',
+                minimum=1,
+            ),
             run_immediately=legacy_run_immediately,
             market_review_enabled=os.getenv('MARKET_REVIEW_ENABLED', 'true').lower() == 'true',
             market_review_region=cls._parse_market_review_region(

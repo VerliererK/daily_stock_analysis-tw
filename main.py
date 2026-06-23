@@ -58,10 +58,12 @@ if os.getenv("DSA_PACKAGED_ALPHASIFT_IMPORT_PROBE") == "1":
     sys.exit(0)
 
 import argparse
+import json
 import logging
 import sys
 import time
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 
 from data_provider.base import canonical_stock_code
@@ -73,6 +75,156 @@ from src.logging_config import setup_logging
 logger = logging.getLogger(__name__)
 _RUNTIME_ENV_FILE_KEYS = set()
 _PUBLIC_BIND_HOSTS = frozenset({"0.0.0.0", "::", "[::]", "*"})
+
+
+@dataclass
+class AnalysisRunOutcome:
+    """Small summary used by scheduled-mode failure protection."""
+
+    attempted: bool = False
+    stock_attempt_count: int = 0
+    stock_success_count: int = 0
+    market_review_attempted: bool = False
+    market_review_succeeded: bool = False
+    skipped_reason: Optional[str] = None
+    error_code: Optional[str] = None
+    dry_run: bool = False
+
+    @property
+    def complete_failure(self) -> bool:
+        if self.skipped_reason or self.dry_run or not self.attempted:
+            return False
+        return self.stock_success_count <= 0 and not self.market_review_succeeded
+
+    @property
+    def failure_reason(self) -> str:
+        if self.error_code:
+            return self.error_code
+        if self.complete_failure:
+            return "no_successful_outputs"
+        if self.skipped_reason:
+            return self.skipped_reason
+        return "ok"
+
+
+class _ScheduleFailureGuard:
+    """Persisted guard that pauses scheduled analysis after repeated failures."""
+
+    STATE_VERSION = 1
+    STATE_FILENAME = "scheduler_failure_guard.json"
+
+    def __init__(self, state_path: Path, max_consecutive_failures: int) -> None:
+        self.state_path = state_path
+        self.max_consecutive_failures = max(1, int(max_consecutive_failures))
+        self._state = self._load_state()
+
+    @classmethod
+    def from_config(cls, config: Config) -> "_ScheduleFailureGuard":
+        database_path = Path(getattr(config, "database_path", "./data/stock_analysis.db")).expanduser()
+        state_dir = database_path.parent if database_path.parent != Path("") else Path(".")
+        return cls(
+            state_dir / cls.STATE_FILENAME,
+            getattr(config, "schedule_max_consecutive_failures", 2),
+        )
+
+    @property
+    def consecutive_failures(self) -> int:
+        try:
+            return max(0, int(self._state.get("consecutive_failures", 0)))
+        except (TypeError, ValueError):
+            return 0
+
+    @property
+    def paused(self) -> bool:
+        return bool(self._state.get("paused"))
+
+    def log_if_paused(self) -> bool:
+        if not self.paused:
+            return False
+        logger.error(
+            "定时任务失败保护已暂停自动分析：连续失败 %d 次，state=%s。"
+            "修复配置、网络或 API key 后，请删除该文件以恢复自动分析。",
+            self.consecutive_failures,
+            self.state_path,
+        )
+        return True
+
+    def record_exception(self) -> None:
+        self._record_failure("exception")
+
+    def record_outcome(self, outcome: AnalysisRunOutcome) -> None:
+        if not isinstance(outcome, AnalysisRunOutcome):
+            logger.debug("定时任务未返回可识别的运行结果，跳过失败保护计数。")
+            return
+
+        if outcome.complete_failure:
+            self._record_failure(outcome.failure_reason)
+            return
+
+        if self.consecutive_failures or self.paused:
+            self._reset()
+
+    def _load_state(self) -> Dict[str, Any]:
+        if not self.state_path.exists():
+            return {}
+        try:
+            raw = json.loads(self.state_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning("读取定时任务失败保护状态失败，已从 0 次失败重新计数: %s", exc)
+            return {}
+        return raw if isinstance(raw, dict) else {}
+
+    def _record_failure(self, reason: str) -> None:
+        failures = self.consecutive_failures + 1
+        paused = failures >= self.max_consecutive_failures
+        now = datetime.now(timezone.utc).isoformat()
+        self._state = {
+            "version": self.STATE_VERSION,
+            "consecutive_failures": failures,
+            "max_consecutive_failures": self.max_consecutive_failures,
+            "paused": paused,
+            "last_failure_at": now,
+            "last_failure_reason": reason,
+        }
+        if paused:
+            self._state["paused_at"] = now
+        self._write_state()
+
+        if paused:
+            logger.error(
+                "定时任务已连续失败 %d 次，达到 SCHEDULE_MAX_CONSECUTIVE_FAILURES=%d，"
+                "已暂停后续自动分析以避免继续消耗搜索或 LLM API 额度。state=%s",
+                failures,
+                self.max_consecutive_failures,
+                self.state_path,
+            )
+        else:
+            logger.warning(
+                "定时任务本轮未产生任何有效分析结果，连续失败 %d/%d 次。",
+                failures,
+                self.max_consecutive_failures,
+            )
+
+    def _reset(self) -> None:
+        self._state = {}
+        try:
+            if self.state_path.exists():
+                self.state_path.unlink()
+            logger.info("定时任务已恢复成功，连续失败计数已清零。")
+        except Exception as exc:
+            logger.warning("清理定时任务失败保护状态失败: %s", exc)
+
+    def _write_state(self) -> None:
+        try:
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path = self.state_path.with_name(f".{self.state_path.name}.tmp")
+            temp_path.write_text(
+                json.dumps(self._state, ensure_ascii=False, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+            temp_path.replace(self.state_path)
+        except Exception as exc:
+            logger.warning("写入定时任务失败保护状态失败，无法持久化连续失败计数: %s", exc)
 
 
 def _get_active_env_path() -> Path:
@@ -502,13 +654,15 @@ def _refresh_stock_index_cache_for_analysis(config: Config) -> None:
 def run_full_analysis(
     config: Config,
     args: argparse.Namespace,
-    stock_codes: Optional[List[str]] = None
-):
+    stock_codes: Optional[List[str]] = None,
+) -> AnalysisRunOutcome:
     """
     执行完整的分析流程（个股 + 大盘复盘）
 
     这是定时任务调用的主函数
     """
+    outcome = AnalysisRunOutcome(dry_run=bool(getattr(args, 'dry_run', False)))
+
     # Import pipeline modules outside the broad try/except so that import-time
     # failures propagate to the caller instead of being silently swallowed.
     from src.core.market_review import run_market_review
@@ -530,11 +684,19 @@ def run_full_analysis(
             logger.info(
                 "今日所有相关市场均为非交易日，跳过执行。可使用 --force-run 强制执行。"
             )
-            return
+            outcome.skipped_reason = "non_trading_day"
+            return outcome
         if set(filtered_codes) != set(effective_codes):
             skipped = set(effective_codes) - set(filtered_codes)
             logger.info("今日休市股票已跳过: %s", skipped)
         stock_codes = filtered_codes
+        outcome.stock_attempt_count = len(stock_codes)
+        outcome.market_review_attempted = bool(
+            config.market_review_enabled
+            and not args.no_market_review
+            and effective_region != ''
+        )
+        outcome.attempted = bool(stock_codes) or outcome.market_review_attempted
 
         # 命令行参数 --single-notify 覆盖配置（#55）
         if getattr(args, 'single_notify', False):
@@ -568,6 +730,7 @@ def run_full_analysis(
             send_notification=not args.no_notify,
             merge_notification=merge_notification
         )
+        outcome.stock_success_count = len(results or [])
 
         # Issue #128: 分析间隔 - 在个股分析和大盘分析之间添加延迟
         analysis_delay = getattr(config, 'analysis_delay', 0)
@@ -606,6 +769,7 @@ def run_full_analysis(
             # 如果有结果，赋值给 market_report 用于后续飞书文档生成
             if review_result:
                 market_report = review_result
+                outcome.market_review_succeeded = True
 
         # Issue #190: 合并推送（个股+大盘复盘）
         if merge_notification and (results or market_report) and not args.no_notify:
@@ -701,7 +865,10 @@ def run_full_analysis(
             logger.warning(f"自动回测失败（已忽略）: {e}")
 
     except Exception as e:
+        outcome.error_code = "exception"
         logger.exception(f"分析流程执行失败: {e}")
+
+    return outcome
 
 
 def start_api_server(host: str, port: int, config: Config) -> None:
@@ -995,7 +1162,16 @@ def main() -> int:
 
             def scheduled_task():
                 runtime_config = _reload_runtime_config()
-                run_full_analysis(runtime_config, args, scheduled_stock_codes)
+                failure_guard = _ScheduleFailureGuard.from_config(runtime_config)
+                if failure_guard.log_if_paused():
+                    return
+
+                try:
+                    outcome = run_full_analysis(runtime_config, args, scheduled_stock_codes)
+                except Exception:
+                    failure_guard.record_exception()
+                    raise
+                failure_guard.record_outcome(outcome)
 
             background_tasks = []
             if getattr(config, 'agent_event_monitor_enabled', False):

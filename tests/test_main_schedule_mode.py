@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Regression tests for scheduled mode stock selection behavior."""
 
+import json
 import logging
 import os
 import tempfile
@@ -88,7 +89,9 @@ class MainScheduleModeTestCase(unittest.TestCase):
             "schedule_enabled": False,
             "schedule_time": "18:00",
             "schedule_run_immediately": True,
+            "schedule_max_consecutive_failures": 2,
             "run_immediately": True,
+            "database_path": str(Path(self.temp_dir.name) / "data" / "stock_analysis.db"),
             "agent_event_monitor_enabled": False,
             "agent_event_alert_rules_json": "",
             "agent_event_monitor_interval_minutes": 5,
@@ -191,6 +194,155 @@ class MainScheduleModeTestCase(unittest.TestCase):
             {"schedule_time": "18:00", "resolved_schedule_time": "09:30"},
         )
         run_full_analysis.assert_called_once_with(runtime_config, args, None)
+
+    def test_schedule_failure_guard_pauses_after_two_complete_failures(self) -> None:
+        args = self._make_args(schedule=True)
+        config = self._make_config(schedule_enabled=False)
+        scheduled_call = {"runs": 0}
+        failure = main.AnalysisRunOutcome(
+            attempted=True,
+            stock_attempt_count=1,
+            stock_success_count=0,
+            market_review_attempted=False,
+        )
+
+        def fake_run_with_schedule(
+            task,
+            schedule_time,
+            run_immediately,
+            background_tasks=None,
+            schedule_time_provider=None,
+        ):
+            for _ in range(3):
+                scheduled_call["runs"] += 1
+                task()
+
+        with (
+            patch("main.parse_arguments", return_value=args),
+            patch("main.get_config", return_value=config),
+            patch("main._reload_runtime_config", return_value=config),
+            patch("main._build_schedule_time_provider", return_value=lambda: "18:00"),
+            patch("main.setup_logging"),
+            patch("main.run_full_analysis", return_value=failure) as run_full_analysis,
+            patch("src.scheduler.run_with_schedule", side_effect=fake_run_with_schedule),
+        ):
+            exit_code = main.main()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(scheduled_call["runs"], 3)
+        self.assertEqual(run_full_analysis.call_count, 2)
+        guard_path = Path(config.database_path).parent / "scheduler_failure_guard.json"
+        state = json.loads(guard_path.read_text(encoding="utf-8"))
+        self.assertTrue(state["paused"])
+        self.assertEqual(state["consecutive_failures"], 2)
+        self.assertEqual(state["last_failure_reason"], "no_successful_outputs")
+
+    def test_schedule_failure_guard_success_resets_failure_state(self) -> None:
+        args = self._make_args(schedule=True)
+        config = self._make_config(schedule_enabled=False)
+        failure = main.AnalysisRunOutcome(attempted=True, stock_attempt_count=1)
+        success = main.AnalysisRunOutcome(
+            attempted=True,
+            stock_attempt_count=1,
+            stock_success_count=1,
+        )
+
+        def fake_run_with_schedule(
+            task,
+            schedule_time,
+            run_immediately,
+            background_tasks=None,
+            schedule_time_provider=None,
+        ):
+            task()
+            task()
+
+        with (
+            patch("main.parse_arguments", return_value=args),
+            patch("main.get_config", return_value=config),
+            patch("main._reload_runtime_config", return_value=config),
+            patch("main._build_schedule_time_provider", return_value=lambda: "18:00"),
+            patch("main.setup_logging"),
+            patch("main.run_full_analysis", side_effect=[failure, success]) as run_full_analysis,
+            patch("src.scheduler.run_with_schedule", side_effect=fake_run_with_schedule),
+        ):
+            exit_code = main.main()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(run_full_analysis.call_count, 2)
+        guard_path = Path(config.database_path).parent / "scheduler_failure_guard.json"
+        self.assertFalse(guard_path.exists())
+
+    def test_schedule_failure_guard_paused_state_survives_restart(self) -> None:
+        args = self._make_args(schedule=True)
+        config = self._make_config(schedule_enabled=False)
+        guard_path = Path(config.database_path).parent / "scheduler_failure_guard.json"
+        guard_path.parent.mkdir(parents=True, exist_ok=True)
+        guard_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "consecutive_failures": 2,
+                    "max_consecutive_failures": 2,
+                    "paused": True,
+                    "last_failure_reason": "no_successful_outputs",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        def fake_run_with_schedule(
+            task,
+            schedule_time,
+            run_immediately,
+            background_tasks=None,
+            schedule_time_provider=None,
+        ):
+            task()
+
+        with (
+            patch("main.parse_arguments", return_value=args),
+            patch("main.get_config", return_value=config),
+            patch("main._reload_runtime_config", return_value=config),
+            patch("main._build_schedule_time_provider", return_value=lambda: "18:00"),
+            patch("main.setup_logging"),
+            patch("main.run_full_analysis") as run_full_analysis,
+            patch("src.scheduler.run_with_schedule", side_effect=fake_run_with_schedule),
+        ):
+            exit_code = main.main()
+
+        self.assertEqual(exit_code, 0)
+        run_full_analysis.assert_not_called()
+
+    def test_schedule_failure_guard_does_not_count_trading_day_skip(self) -> None:
+        args = self._make_args(schedule=True)
+        config = self._make_config(schedule_enabled=False)
+        skipped = main.AnalysisRunOutcome(skipped_reason="non_trading_day")
+
+        def fake_run_with_schedule(
+            task,
+            schedule_time,
+            run_immediately,
+            background_tasks=None,
+            schedule_time_provider=None,
+        ):
+            task()
+
+        with (
+            patch("main.parse_arguments", return_value=args),
+            patch("main.get_config", return_value=config),
+            patch("main._reload_runtime_config", return_value=config),
+            patch("main._build_schedule_time_provider", return_value=lambda: "18:00"),
+            patch("main.setup_logging"),
+            patch("main.run_full_analysis", return_value=skipped) as run_full_analysis,
+            patch("src.scheduler.run_with_schedule", side_effect=fake_run_with_schedule),
+        ):
+            exit_code = main.main()
+
+        self.assertEqual(exit_code, 0)
+        run_full_analysis.assert_called_once_with(config, args, None)
+        guard_path = Path(config.database_path).parent / "scheduler_failure_guard.json"
+        self.assertFalse(guard_path.exists())
 
     def test_schedule_mode_registers_event_monitor_background_task(self) -> None:
         args = self._make_args(schedule=True)
