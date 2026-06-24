@@ -422,7 +422,7 @@ daily_stock_analysis/
 | `TRADING_DAY_CHECK_ENABLED` | 交易日检查：默认 `true`，非交易日跳过执行；设为 `false` 或使用 `--force-run` 可强制执行（Issue #373） | `true` |
 | `SCHEDULE_ENABLED` | 启用定时任务 | `false` |
 | `SCHEDULE_TIME` | 定时执行时间 | `18:00` |
-| `SCHEDULE_MAX_CONSECUTIVE_FAILURES` | 内置 schedule 连续完整失败达到该次数后暂停自动分析，避免耗尽搜索/LLM API 额度 | `2` |
+| `SCHEDULE_MAX_CONSECUTIVE_FAILURES` | 内置 schedule 连续完整失败达到该次数后暂停自动分析，并在未使用 `--no-notify` 时通过已配置通知渠道发送一次暂停告警 | `2` |
 | `LOG_DIR` | 日志目录 | `./logs` |
 | `SAVE_CONTEXT_SNAPSHOT` | 保存分析历史 `context_snapshot`；设为 `false` 时新历史不保存 enhanced_context、market_phase_summary、AnalysisContextPack overview 或诊断快照，但不关闭当次 Prompt 低敏摘要 | `true` |
 
@@ -700,7 +700,7 @@ python main.py --schedule --no-run-immediately
 
 > 说明：定时模式每次触发前都会重新读取当前保存的 `STOCK_LIST`。如果同时传入 `--stocks`，该参数不会锁定后续计划执行的股票列表；需要临时只跑指定股票时，请使用非定时的单次运行命令。
 >
-> 从 `python main.py --schedule`、`python main.py --serve --schedule` 或等价内置调度模式启动后，WebUI 保存新的 `SCHEDULE_TIME` 会在下一轮调度检查内自动重绑 daily job，无需重启进程；旧的执行时间不会继续保留。内置 schedule 连续完整失败达到 `SCHEDULE_MAX_CONSECUTIVE_FAILURES` 后会暂停自动分析；修复配置、网络或 API key 后，删除 `DATABASE_PATH` 同目录下的 `scheduler_failure_guard.json` 可恢复。
+> 从 `python main.py --schedule`、`python main.py --serve --schedule` 或等价内置调度模式启动后，WebUI 保存新的 `SCHEDULE_TIME` 会在下一轮调度检查内自动重绑 daily job，无需重启进程；旧的执行时间不会继续保留。内置 schedule 连续完整失败达到 `SCHEDULE_MAX_CONSECUTIVE_FAILURES` 后会暂停自动分析；如已配置通知渠道且启动时未使用 `--no-notify`，首次进入暂停状态会发送一次操作告警，后续 tick 不重复发送。修复配置、网络或 API key 后，删除 `DATABASE_PATH` 同目录下的 `scheduler_failure_guard.json` 可恢复。
 
 #### 环境变量方式
 
@@ -711,7 +711,7 @@ python main.py --schedule --no-run-immediately
 | `SCHEDULE_ENABLED` | 是否启用定时任务 | `false` | `true` |
 | `SCHEDULE_TIME` | 每日执行时间 (HH:MM) | `18:00` | `09:30` |
 | `SCHEDULE_RUN_IMMEDIATELY` | 定时模式启动时是否立即运行一次；未显式设置时沿用 `RUN_IMMEDIATELY` 的运行时覆盖语义 | `true` | `false` |
-| `SCHEDULE_MAX_CONSECUTIVE_FAILURES` | 内置 schedule 连续完整失败达到该次数后暂停自动分析；修复后删除 `DATABASE_PATH` 同目录下的 `scheduler_failure_guard.json` 可恢复 | `2` | `1` |
+| `SCHEDULE_MAX_CONSECUTIVE_FAILURES` | 内置 schedule 连续完整失败达到该次数后暂停自动分析；未使用 `--no-notify` 时首次暂停会发送一次操作告警；修复后删除 `DATABASE_PATH` 同目录下的 `scheduler_failure_guard.json` 可恢复 | `2` | `1` |
 | `RUN_IMMEDIATELY` | 非定时模式启动时是否立即运行一次；同时作为未显式设置 `SCHEDULE_RUN_IMMEDIATELY` 时的 legacy 回退 | `true` | `false` |
 | `TRADING_DAY_CHECK_ENABLED` | 交易日检查：非交易日跳过执行；设为 `false` 可强制执行 | `true` | `false` |
 

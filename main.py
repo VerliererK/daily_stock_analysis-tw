@@ -138,6 +138,11 @@ class _ScheduleFailureGuard:
     def paused(self) -> bool:
         return bool(self._state.get("paused"))
 
+    @property
+    def last_failure_reason(self) -> str:
+        reason = self._state.get("last_failure_reason")
+        return str(reason) if reason else "unknown"
+
     def log_if_paused(self) -> bool:
         if not self.paused:
             return False
@@ -149,20 +154,20 @@ class _ScheduleFailureGuard:
         )
         return True
 
-    def record_exception(self) -> None:
-        self._record_failure("exception")
+    def record_exception(self) -> bool:
+        return self._record_failure("exception")
 
-    def record_outcome(self, outcome: AnalysisRunOutcome) -> None:
+    def record_outcome(self, outcome: AnalysisRunOutcome) -> bool:
         if not isinstance(outcome, AnalysisRunOutcome):
             logger.debug("定时任务未返回可识别的运行结果，跳过失败保护计数。")
-            return
+            return False
 
         if outcome.complete_failure:
-            self._record_failure(outcome.failure_reason)
-            return
+            return self._record_failure(outcome.failure_reason)
 
         if self.consecutive_failures or self.paused:
             self._reset()
+        return False
 
     def _load_state(self) -> Dict[str, Any]:
         if not self.state_path.exists():
@@ -174,9 +179,11 @@ class _ScheduleFailureGuard:
             return {}
         return raw if isinstance(raw, dict) else {}
 
-    def _record_failure(self, reason: str) -> None:
+    def _record_failure(self, reason: str) -> bool:
+        was_paused = self.paused
         failures = self.consecutive_failures + 1
         paused = failures >= self.max_consecutive_failures
+        newly_paused = paused and not was_paused
         now = datetime.now(timezone.utc).isoformat()
         self._state = {
             "version": self.STATE_VERSION,
@@ -204,6 +211,7 @@ class _ScheduleFailureGuard:
                 failures,
                 self.max_consecutive_failures,
             )
+        return newly_paused
 
     def _reset(self) -> None:
         self._state = {}
@@ -225,6 +233,28 @@ class _ScheduleFailureGuard:
             temp_path.replace(self.state_path)
         except Exception as exc:
             logger.warning("写入定时任务失败保护状态失败，无法持久化连续失败计数: %s", exc)
+
+
+def _send_schedule_pause_notification(config: Config, guard: _ScheduleFailureGuard) -> None:
+    """Best-effort operational alert when scheduled analysis is first paused."""
+    content = (
+        "定时任务已暂停\n\n"
+        f"- 连续失败次数: {guard.consecutive_failures}\n"
+        f"- 暂停门槛: {guard.max_consecutive_failures}\n"
+        f"- 最后失败原因: {guard.last_failure_reason}\n"
+        f"- 状态文件: {guard.state_path}\n"
+        "- 恢复方式: 修复配置、网络或 API key 后，删除上述 state file；"
+        "schedule 进程会在后续 tick 恢复执行，或可重启进程。"
+    )
+    try:
+        from src.notification import NotificationService
+
+        if NotificationService().send(content):
+            logger.info("已发送定时任务暂停告警。")
+        else:
+            logger.warning("定时任务暂停告警发送失败：没有通知渠道成功发送。")
+    except Exception as exc:  # noqa: BLE001 - alerting must not affect guard state.
+        logger.warning("定时任务暂停告警发送失败，已忽略: %s", exc)
 
 
 def _get_active_env_path() -> Path:
@@ -1169,9 +1199,13 @@ def main() -> int:
                 try:
                     outcome = run_full_analysis(runtime_config, args, scheduled_stock_codes)
                 except Exception:
-                    failure_guard.record_exception()
+                    newly_paused = failure_guard.record_exception()
+                    if newly_paused and not getattr(args, 'no_notify', False):
+                        _send_schedule_pause_notification(runtime_config, failure_guard)
                     raise
-                failure_guard.record_outcome(outcome)
+                newly_paused = failure_guard.record_outcome(outcome)
+                if newly_paused and not getattr(args, 'no_notify', False):
+                    _send_schedule_pause_notification(runtime_config, failure_guard)
 
             background_tasks = []
             if getattr(config, 'agent_event_monitor_enabled', False):

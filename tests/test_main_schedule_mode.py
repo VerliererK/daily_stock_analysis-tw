@@ -195,7 +195,7 @@ class MainScheduleModeTestCase(unittest.TestCase):
         )
         run_full_analysis.assert_called_once_with(runtime_config, args, None)
 
-    def test_schedule_failure_guard_pauses_after_two_complete_failures(self) -> None:
+    def test_schedule_failure_guard_pauses_and_notifies_once(self) -> None:
         args = self._make_args(schedule=True)
         config = self._make_config(schedule_enabled=False)
         scheduled_call = {"runs": 0}
@@ -224,18 +224,140 @@ class MainScheduleModeTestCase(unittest.TestCase):
             patch("main._build_schedule_time_provider", return_value=lambda: "18:00"),
             patch("main.setup_logging"),
             patch("main.run_full_analysis", return_value=failure) as run_full_analysis,
+            patch("src.notification.NotificationService") as notification_service_cls,
             patch("src.scheduler.run_with_schedule", side_effect=fake_run_with_schedule),
         ):
+            notifier = notification_service_cls.return_value
+            notifier.send.return_value = True
             exit_code = main.main()
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(scheduled_call["runs"], 3)
         self.assertEqual(run_full_analysis.call_count, 2)
+        notification_service_cls.assert_called_once_with()
+        notifier.send.assert_called_once()
+        self.assertEqual(notifier.send.call_args.kwargs, {})
+        notification_content = notifier.send.call_args.args[0]
+        self.assertIn("定时任务已暂停", notification_content)
+        self.assertIn("连续失败次数: 2", notification_content)
+        self.assertIn("暂停门槛: 2", notification_content)
+        self.assertIn("最后失败原因: no_successful_outputs", notification_content)
+        self.assertIn("scheduler_failure_guard.json", notification_content)
         guard_path = Path(config.database_path).parent / "scheduler_failure_guard.json"
         state = json.loads(guard_path.read_text(encoding="utf-8"))
         self.assertTrue(state["paused"])
         self.assertEqual(state["consecutive_failures"], 2)
         self.assertEqual(state["last_failure_reason"], "no_successful_outputs")
+
+    def test_schedule_failure_guard_no_notify_suppresses_pause_notification(self) -> None:
+        args = self._make_args(schedule=True, no_notify=True)
+        config = self._make_config(schedule_enabled=False)
+        failure = main.AnalysisRunOutcome(
+            attempted=True,
+            stock_attempt_count=1,
+            stock_success_count=0,
+            market_review_attempted=False,
+        )
+
+        def fake_run_with_schedule(
+            task,
+            schedule_time,
+            run_immediately,
+            background_tasks=None,
+            schedule_time_provider=None,
+        ):
+            task()
+            task()
+
+        with (
+            patch("main.parse_arguments", return_value=args),
+            patch("main.get_config", return_value=config),
+            patch("main._reload_runtime_config", return_value=config),
+            patch("main._build_schedule_time_provider", return_value=lambda: "18:00"),
+            patch("main.setup_logging"),
+            patch("main.run_full_analysis", return_value=failure) as run_full_analysis,
+            patch("src.notification.NotificationService") as notification_service_cls,
+            patch("src.scheduler.run_with_schedule", side_effect=fake_run_with_schedule),
+        ):
+            exit_code = main.main()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(run_full_analysis.call_count, 2)
+        notification_service_cls.assert_not_called()
+        guard_path = Path(config.database_path).parent / "scheduler_failure_guard.json"
+        state = json.loads(guard_path.read_text(encoding="utf-8"))
+        self.assertTrue(state["paused"])
+        self.assertEqual(state["consecutive_failures"], 2)
+
+    def test_schedule_failure_guard_ignores_pause_notification_send_failure(self) -> None:
+        args = self._make_args(schedule=True)
+        config = self._make_config(schedule_enabled=False)
+        failure = main.AnalysisRunOutcome(attempted=True, stock_attempt_count=1)
+
+        def fake_run_with_schedule(
+            task,
+            schedule_time,
+            run_immediately,
+            background_tasks=None,
+            schedule_time_provider=None,
+        ):
+            task()
+            task()
+
+        with (
+            patch("main.parse_arguments", return_value=args),
+            patch("main.get_config", return_value=config),
+            patch("main._reload_runtime_config", return_value=config),
+            patch("main._build_schedule_time_provider", return_value=lambda: "18:00"),
+            patch("main.setup_logging"),
+            patch("main.run_full_analysis", return_value=failure),
+            patch("src.notification.NotificationService") as notification_service_cls,
+            patch("src.scheduler.run_with_schedule", side_effect=fake_run_with_schedule),
+        ):
+            notification_service_cls.return_value.send.side_effect = RuntimeError("send failed")
+            exit_code = main.main()
+
+        self.assertEqual(exit_code, 0)
+        guard_path = Path(config.database_path).parent / "scheduler_failure_guard.json"
+        state = json.loads(guard_path.read_text(encoding="utf-8"))
+        self.assertTrue(state["paused"])
+        notification_service_cls.return_value.send.assert_called_once()
+
+    def test_schedule_failure_guard_ignores_pause_notification_init_failure(self) -> None:
+        args = self._make_args(schedule=True)
+        config = self._make_config(schedule_enabled=False)
+        failure = main.AnalysisRunOutcome(attempted=True, stock_attempt_count=1)
+
+        def fake_run_with_schedule(
+            task,
+            schedule_time,
+            run_immediately,
+            background_tasks=None,
+            schedule_time_provider=None,
+        ):
+            task()
+            task()
+
+        with (
+            patch("main.parse_arguments", return_value=args),
+            patch("main.get_config", return_value=config),
+            patch("main._reload_runtime_config", return_value=config),
+            patch("main._build_schedule_time_provider", return_value=lambda: "18:00"),
+            patch("main.setup_logging"),
+            patch("main.run_full_analysis", return_value=failure),
+            patch(
+                "src.notification.NotificationService",
+                side_effect=RuntimeError("init failed"),
+            ) as notification_service_cls,
+            patch("src.scheduler.run_with_schedule", side_effect=fake_run_with_schedule),
+        ):
+            exit_code = main.main()
+
+        self.assertEqual(exit_code, 0)
+        guard_path = Path(config.database_path).parent / "scheduler_failure_guard.json"
+        state = json.loads(guard_path.read_text(encoding="utf-8"))
+        self.assertTrue(state["paused"])
+        notification_service_cls.assert_called_once_with()
 
     def test_schedule_failure_guard_success_resets_failure_state(self) -> None:
         args = self._make_args(schedule=True)

@@ -350,7 +350,7 @@ For the notification baseline, diagnostics, and deployment notes, see [Notificat
 | `SCHEDULE_ENABLED` | Enable scheduled tasks | `false` |
 | `SCHEDULE_TIME` | Scheduled execution time | `18:00` |
 | `SCHEDULE_RUN_IMMEDIATELY` | Run once immediately when scheduler mode starts; when unset it keeps following the legacy `RUN_IMMEDIATELY` runtime override | `true` |
-| `SCHEDULE_MAX_CONSECUTIVE_FAILURES` | Pause built-in scheduled analysis after this many consecutive full-run failures; delete `scheduler_failure_guard.json` next to `DATABASE_PATH` after fixing the issue to resume | `2` |
+| `SCHEDULE_MAX_CONSECUTIVE_FAILURES` | Pause built-in scheduled analysis after this many consecutive full-run failures, and send one pause alert through configured notification channels unless `--no-notify` is used; delete `scheduler_failure_guard.json` next to `DATABASE_PATH` after fixing the issue to resume | `2` |
 | `RUN_IMMEDIATELY` | Run once immediately for non-scheduler startup; also acts as the legacy fallback when `SCHEDULE_RUN_IMMEDIATELY` is unset | `true` |
 | `LOG_DIR` | Log directory | `./logs` |
 | `SAVE_CONTEXT_SNAPSHOT` | Persist analysis-history `context_snapshot`. When false, new history records do not save enhanced_context, market_phase_summary, AnalysisContextPack overview, or diagnostic snapshots, but current-run prompt summaries remain enabled | `true` |
@@ -607,7 +607,7 @@ crontab -e
 
 > Note: Scheduled mode reloads the saved `STOCK_LIST` before each run. If you also pass `--stocks`, it will not pin future scheduled executions to the startup snapshot; use a normal one-off run when you want to analyze a temporary stock list.
 >
-> When the built-in scheduler is started via `python main.py --schedule`, `python main.py --serve --schedule`, or an equivalent local mode, saving a new `SCHEDULE_TIME` from the WebUI will rebind the daily job on the next scheduler poll without restarting the process. The previous trigger time is removed instead of being kept alongside the new one. After `SCHEDULE_MAX_CONSECUTIVE_FAILURES` consecutive full-run failures, built-in scheduled analysis pauses; delete `scheduler_failure_guard.json` next to `DATABASE_PATH` after fixing config, network, or API keys to resume.
+> When the built-in scheduler is started via `python main.py --schedule`, `python main.py --serve --schedule`, or an equivalent local mode, saving a new `SCHEDULE_TIME` from the WebUI will rebind the daily job on the next scheduler poll without restarting the process. The previous trigger time is removed instead of being kept alongside the new one. After `SCHEDULE_MAX_CONSECUTIVE_FAILURES` consecutive full-run failures, built-in scheduled analysis pauses. If notification channels are configured and startup did not use `--no-notify`, the first transition into the paused state sends one operational alert; later ticks do not repeat it. Delete `scheduler_failure_guard.json` next to `DATABASE_PATH` after fixing config, network, or API keys to resume.
 
 ### Market Phase Baseline (Issue #1386 P0)
 

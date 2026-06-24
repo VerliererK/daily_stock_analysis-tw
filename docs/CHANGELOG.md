@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-- [修复] 内置 schedule 连续完整失败达到 `SCHEDULE_MAX_CONSECUTIVE_FAILURES` 后会暂停自动分析并持久化 guard state，避免故障时持续消耗搜索或 LLM API 额度。
+- [修复] 内置 schedule 连续完整失败达到 `SCHEDULE_MAX_CONSECUTIVE_FAILURES` 后会暂停自动分析并持久化 guard state，且未使用 `--no-notify` 时首次暂停会发送一次操作告警，避免故障时持续消耗搜索或 LLM API 额度又不洗频通知。
 - [修复] 问股从历史报告进入后的追问会持续携带当前标的，切回或重载已有会话时可从历史消息恢复基础当前标的，并由后端阻断未明确切换时的错误股票工具调用、交易所片段和指标缩写误路由。
 - [修复] 自选股加入和删除按等价股票代码匹配港股及大小写美股变体，避免 `00700`、`HK00700`、`00700.HK` 或 `aapl`、`AAPL` 被误判为不同标的。
 - [改进] #1390 P0 为个股分析与历史/回测展示新增可选八态 `action` / `action_label` 建议动作字段，保留 `operation_advice` 自由文本和 `decision_type=buy|hold|sell` 统计口径，不新增迁移或配置项。
