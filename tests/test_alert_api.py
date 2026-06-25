@@ -495,6 +495,16 @@ class AlertApiTestCase(unittest.TestCase):
         self.assertEqual(created["target"], "cn")
         self.assertEqual(created["parameters"], {"statuses": ["red", "yellow"]})
 
+        tw_created = self._create_rule({
+            "name": "TW market score drop",
+            "target_scope": "market",
+            "target": " TW ",
+            "alert_type": "market_light_score_drop",
+            "parameters": {"min_drop": 10},
+        })
+        self.assertEqual(tw_created["target"], "tw")
+        self.assertEqual(tw_created["parameters"], {"min_drop": 10.0})
+
         invalid_symbol_rule = self.client.post(
             "/api/v1/alerts/rules",
             json={

@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class PortfolioAccountCreateRequest(BaseModel):
@@ -15,6 +15,20 @@ class PortfolioAccountCreateRequest(BaseModel):
     market: Literal["cn", "hk", "us", "tw"] = "cn"
     base_currency: str = Field("CNY", min_length=3, max_length=8)
     owner_id: Optional[str] = Field(None, max_length=64)
+
+    @model_validator(mode="after")
+    def apply_market_default_currency(self) -> "PortfolioAccountCreateRequest":
+        if "base_currency" in self.model_fields_set:
+            return self
+        if self.market == "hk":
+            self.base_currency = "HKD"
+        elif self.market == "us":
+            self.base_currency = "USD"
+        elif self.market == "tw":
+            self.base_currency = "TWD"
+        else:
+            self.base_currency = "CNY"
+        return self
 
 
 class PortfolioAccountUpdateRequest(BaseModel):

@@ -10,6 +10,7 @@ from unittest.mock import patch
 from src.services.market_light_alerts import (
     MarketLightAlert,
     evaluate_market_light_alert,
+    make_market_light_payload,
     normalize_market_alert_parameters,
 )
 
@@ -55,6 +56,24 @@ class MarketLightAlertsTestCase(unittest.TestCase):
     def test_normalize_status_rejects_green(self) -> None:
         with self.assertRaisesRegex(ValueError, "red or yellow"):
             normalize_market_alert_parameters("market_light_status", {"statuses": ["green"]})
+
+    def test_market_light_payload_accepts_tw_target(self) -> None:
+        payload = make_market_light_payload(
+            parent_key="market:tw:market_light_status:{}",
+            data={
+                "id": 9,
+                "name": "TW market",
+                "target_scope": "market",
+                "target": "TW",
+                "alert_type": "market_light_status",
+                "parameters": {"statuses": ["red"]},
+            },
+            config=type("Config", (), {"trading_day_check_enabled": False})(),
+        )
+
+        self.assertEqual(payload.effective_target, "tw")
+        self.assertEqual(payload.display_target, "台股大盘")
+        self.assertEqual(payload.rule.target, "tw")
 
     def test_status_unavailable_is_skipped(self) -> None:
         result = evaluate_market_light_alert(

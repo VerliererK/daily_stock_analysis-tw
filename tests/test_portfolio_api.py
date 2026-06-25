@@ -179,6 +179,39 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertAlmostEqual(account_snapshot["total_market_value"], 11000.0, places=6)
         self.assertAlmostEqual(account_snapshot["total_equity"], 11000.0, places=6)
 
+    def test_tw_account_uses_twd_default_and_accepts_0050_trade(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "TW", "broker": "Demo", "market": "tw"},
+        )
+        self.assertEqual(create_resp.status_code, 200, create_resp.text)
+        account = create_resp.json()
+        self.assertEqual(account["market"], "tw")
+        self.assertEqual(account["base_currency"], "TWD")
+
+        trade_resp = self.client.post(
+            "/api/v1/portfolio/trades",
+            json={
+                "account_id": account["id"],
+                "symbol": "0050",
+                "trade_date": "2026-01-02",
+                "side": "buy",
+                "quantity": 100,
+                "price": 120,
+            },
+        )
+        self.assertEqual(trade_resp.status_code, 200, trade_resp.text)
+
+        list_resp = self.client.get(
+            "/api/v1/portfolio/trades",
+            params={"account_id": account["id"], "symbol": "0050"},
+        )
+        self.assertEqual(list_resp.status_code, 200, list_resp.text)
+        trade = list_resp.json()["items"][0]
+        self.assertEqual(trade["symbol"], "0050")
+        self.assertEqual(trade["market"], "tw")
+        self.assertEqual(trade["currency"], "TWD")
+
     def test_delete_account_deactivates_without_hard_deleting(self) -> None:
         create_resp = self.client.post(
             "/api/v1/portfolio/accounts",

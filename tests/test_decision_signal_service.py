@@ -98,6 +98,25 @@ def test_service_normalizes_fields_and_partial_plan_quality(isolated_db) -> None
     assert item["plan_quality"] == "partial"
 
 
+def test_service_accepts_tw_market_signal(isolated_db) -> None:
+    service = DecisionSignalService(db_manager=isolated_db)
+
+    result = service.create_signal(
+        _payload(
+            stock_code="2330",
+            stock_name="台積電",
+            market="tw",
+            source_report_id=102,
+            trace_id="trace-tw-102",
+        )
+    )
+
+    item = result["item"]
+    assert result["created"] is True
+    assert item["stock_code"] == "TW2330"
+    assert item["market"] == "tw"
+
+
 def test_service_plan_quality_slots_and_explicit_override(isolated_db) -> None:
     service = DecisionSignalService(db_manager=isolated_db)
 

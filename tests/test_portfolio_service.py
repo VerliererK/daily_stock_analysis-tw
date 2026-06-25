@@ -110,6 +110,39 @@ class PortfolioServiceTestCase(unittest.TestCase):
             self._save_close(self.service._normalize_symbol(symbol), close_date or date(2026, 1, 3), close)
         return aid
 
+    def test_tw_account_defaults_to_twd_and_accepts_0050_trade(self) -> None:
+        account = self.service.create_account(
+            name="TW",
+            broker="Demo",
+            market="tw",
+        )
+        account_id = account["id"]
+
+        self.assertEqual(account["market"], "tw")
+        self.assertEqual(account["base_currency"], "TWD")
+
+        self.service.record_cash_ledger(
+            account_id=account_id,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=100000,
+        )
+        self.service.record_trade(
+            account_id=account_id,
+            symbol="0050",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=100,
+            price=120,
+        )
+
+        trades = self.service.list_trade_events(account_id=account_id)
+        self.assertEqual(trades["total"], 1)
+        trade = trades["items"][0]
+        self.assertEqual(trade["symbol"], "0050")
+        self.assertEqual(trade["market"], "tw")
+        self.assertEqual(trade["currency"], "TWD")
+
     def test_current_snapshot_uses_realtime_price_when_close_missing(self) -> None:
         today = date.today()
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")

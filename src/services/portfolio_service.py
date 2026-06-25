@@ -95,14 +95,16 @@ class PortfolioService:
         name: str,
         broker: Optional[str],
         market: str,
-        base_currency: str,
+        base_currency: Optional[str] = None,
         owner_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         name_norm = (name or "").strip()
         if not name_norm:
             raise ValueError("name is required")
         market_norm = self._normalize_market(market)
-        base_currency_norm = self._normalize_currency(base_currency)
+        base_currency_norm = self._normalize_currency(
+            base_currency or self._default_currency_for_market(market_norm)
+        )
         row = self.repo.create_account(
             name=name_norm,
             broker=(broker or "").strip() or None,

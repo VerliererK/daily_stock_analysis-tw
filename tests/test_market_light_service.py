@@ -18,6 +18,7 @@ from src.services.market_light_service import (
     MARKET_LIGHT_HISTORY_BATCH_SIZE,
     build_current_snapshot,
     load_previous_snapshot,
+    normalize_market_region,
 )
 from src.storage import AnalysisHistory, DatabaseManager
 
@@ -98,6 +99,9 @@ class MarketLightServiceTestCase(unittest.TestCase):
         assert previous is not None
         self.assertEqual(previous["trade_date"], "2026-03-06")
         self.assertEqual(previous["score"], 72)
+
+    def test_normalize_market_region_accepts_tw(self) -> None:
+        self.assertEqual(normalize_market_region(" TW "), "tw")
 
     def test_load_previous_snapshot_prefers_latest_trade_date_over_newer_backfill(self) -> None:
         self._add_history(
