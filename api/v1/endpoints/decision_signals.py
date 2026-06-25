@@ -111,7 +111,7 @@ def create_signal(request: DecisionSignalCreateRequest) -> DecisionSignalMutatio
     operation_id="listDecisionSignals",
 )
 def list_signals(
-    market: Optional[str] = Query(None, description="Optional market filter: cn/hk/us"),
+    market: Optional[str] = Query(None, description="Optional market filter: cn/hk/us/tw"),
     stock_code: Optional[str] = Query(None, description="Optional stock code filter"),
     action: Optional[str] = Query(None, description="Optional decision action filter"),
     market_phase: Optional[str] = Query(None, description="Optional market phase filter"),
@@ -178,7 +178,7 @@ def list_signals(
 )
 def get_latest_active(
     stock_code: str,
-    market: Optional[str] = Query(None, description="Optional market filter: cn/hk/us"),
+    market: Optional[str] = Query(None, description="Optional market filter: cn/hk/us/tw"),
     limit: int = Query(1, ge=1, le=100),
 ) -> DecisionSignalListResponse:
     service = DecisionSignalService()

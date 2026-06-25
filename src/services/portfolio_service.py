@@ -29,7 +29,7 @@ except Exception:  # pragma: no cover - optional dependency path
     yf = None
 
 EPS = 1e-8
-VALID_MARKETS = {"cn", "hk", "us"}
+VALID_MARKETS = {"cn", "hk", "us", "tw"}
 VALID_COST_METHODS = {"fifo", "avg"}
 VALID_SIDES = {"buy", "sell"}
 VALID_CASH_DIRECTIONS = {"in", "out"}
@@ -1584,7 +1584,7 @@ class PortfolioService:
     def _normalize_market(value: str) -> str:
         market = (value or "").strip().lower()
         if market not in VALID_MARKETS:
-            raise ValueError("market must be one of: cn, hk, us")
+            raise ValueError("market must be one of: cn, hk, us, tw")
         return market
 
     @staticmethod
@@ -1607,4 +1607,6 @@ class PortfolioService:
             return "HKD"
         if market == "us":
             return "USD"
+        if market == "tw":
+            return "TWD"
         return "CNY"
