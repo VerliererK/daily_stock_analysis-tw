@@ -1290,19 +1290,25 @@ class AlertService:
         if alert_type == "cci_threshold":
             return f"{target} CCI{parameters['period']} {parameters['direction']} {parameters['threshold']}"
         if alert_type == "portfolio_stop_loss":
-            return f"{target} portfolio stop loss {parameters.get('mode', 'near')}"
+            target_label = AlertService._portfolio_target_label(target)
+            mode = "觸發" if parameters.get("mode") == "breach" else "接近"
+            return f"{target_label}組合止損{mode}"
         if alert_type == "portfolio_concentration":
-            return f"{target} portfolio concentration"
+            return f"{AlertService._portfolio_target_label(target)}組合集中度"
         if alert_type == "portfolio_drawdown":
-            return f"{target} portfolio drawdown"
+            return f"{AlertService._portfolio_target_label(target)}組合回撤"
         if alert_type == "portfolio_price_stale":
-            return f"{target} portfolio stale price"
+            return f"{AlertService._portfolio_target_label(target)}組合價格狀態"
         if alert_type == "market_light_status":
             statuses = ",".join(parameters.get("statuses") or ["red", "yellow"])
             return f"{target} market light status {statuses}"
         if alert_type == "market_light_score_drop":
             return f"{target} market light score drop {parameters['min_drop']}"
         return f"{target} {alert_type}"
+
+    @staticmethod
+    def _portfolio_target_label(target: str) -> str:
+        return "全部帳戶" if str(target).strip().lower() == "all" else f"帳戶 {target}"
 
     @staticmethod
     def _dump_json(value: Dict[str, Any]) -> str:

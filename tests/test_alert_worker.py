@@ -1597,8 +1597,8 @@ class AlertWorkerTestCase(unittest.TestCase):
                 "threshold": 35.0,
                 "data_source": "portfolio_risk",
                 "data_timestamp": None,
-                "reason": "account all concentration top weight 42.00%",
-                "message": "account all concentration top weight 42.00%",
+                "reason": "全部帳戶集中度最高權重 42.00%",
+                "message": "全部帳戶集中度最高權重 42.00%",
                 "diagnostics": '{"account_id":"all","currency":"CNY","as_of":"2026-05-20"}',
             }
 

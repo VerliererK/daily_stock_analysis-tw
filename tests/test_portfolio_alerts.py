@@ -11,6 +11,7 @@ from src.services.portfolio_alerts import (
     PortfolioRiskAlert,
     evaluate_portfolio_risk_alert,
     expand_symbol_targets,
+    make_portfolio_risk_payload,
     normalize_portfolio_alert_parameters,
 )
 
@@ -84,6 +85,22 @@ def _risk_report():
 
 
 class PortfolioAlertsTestCase(unittest.TestCase):
+    def test_portfolio_risk_payload_uses_chinese_display_target(self) -> None:
+        payload = make_portfolio_risk_payload(
+            parent_key="rule:1",
+            data={
+                "id": 1,
+                "target_scope": "portfolio_account",
+                "target": "all",
+                "alert_type": "portfolio_concentration",
+                "parameters": {},
+                "name": "Portfolio risk",
+            },
+        )
+
+        self.assertEqual(payload.display_target, "全部帳戶")
+        self.assertEqual(payload.rule.metadata["display_target"], "全部帳戶")
+
     def test_normalizes_stop_loss_mode(self) -> None:
         self.assertEqual(normalize_portfolio_alert_parameters("portfolio_stop_loss", {}), {"mode": "near"})
         self.assertEqual(
@@ -108,9 +125,9 @@ class PortfolioAlertsTestCase(unittest.TestCase):
 
         self.assertTrue(near["triggered"])
         self.assertEqual(near["observed_value"], 12.0)
-        self.assertIn("2 affected symbols", near["message"])
+        self.assertIn("帳戶 1止損接近：2 個標的受影響", near["message"])
         self.assertTrue(breach["triggered"])
-        self.assertIn("1 affected symbols", breach["message"])
+        self.assertIn("帳戶 1止損觸發：1 個標的受影響", breach["message"])
         diagnostics = json.loads(near["diagnostics"])
         self.assertEqual(diagnostics["account_id"], 1)
         self.assertEqual(diagnostics["currency"], "USD")
@@ -126,6 +143,7 @@ class PortfolioAlertsTestCase(unittest.TestCase):
         self.assertTrue(result["triggered"])
         self.assertEqual(result["observed_value"], 42.5)
         self.assertEqual(result["threshold"], 35.0)
+        self.assertEqual(result["message"], "帳戶 1集中度最高權重 42.50%")
 
     def test_drawdown_uses_risk_report_alert_and_max_drawdown(self) -> None:
         result = evaluate_portfolio_risk_alert(
@@ -135,6 +153,7 @@ class PortfolioAlertsTestCase(unittest.TestCase):
 
         self.assertTrue(result["triggered"])
         self.assertEqual(result["observed_value"], 20.0)
+        self.assertEqual(result["message"], "帳戶 1最大回撤 20.00%")
         diagnostics = json.loads(result["diagnostics"])
         self.assertEqual(diagnostics["current_drawdown_pct"], 5.0)
         self.assertEqual(diagnostics["max_drawdown_pct"], 20.0)
@@ -162,6 +181,7 @@ class PortfolioAlertsTestCase(unittest.TestCase):
 
         self.assertTrue(result["triggered"])
         self.assertEqual(result["observed_value"], 2.0)
+        self.assertEqual(result["message"], "帳戶 3價格過期或缺失：2 個標的")
         diagnostics = json.loads(result["diagnostics"])
         self.assertEqual(diagnostics["account_id"], 3)
         self.assertTrue(diagnostics["price_stale"])

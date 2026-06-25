@@ -192,7 +192,7 @@ def make_portfolio_risk_payload(
     data: Dict[str, Any],
 ) -> RuntimeAlertPayload:
     effective_target = portfolio_effective_target(data["target"])
-    display_target = "全部账户" if data["target"] == "all" else f"账户 {data['target']}"
+    display_target = "全部帳戶" if data["target"] == "all" else f"帳戶 {data['target']}"
     rule = PortfolioRiskAlert(
         target_scope=data["target_scope"],
         target=data["target"],
@@ -419,9 +419,9 @@ def _evaluate_stop_loss(rule: PortfolioRiskAlert, report: Dict[str, Any]) -> Dic
         "triggered_count": stop_loss.get("triggered_count", 0),
     })
     message = (
-        f"{_display_account(report)} stop-loss {mode}: {len(affected)} affected symbols"
+        f"{_display_account(report)}止損{_stop_loss_mode_label(mode)}：{len(affected)} 個標的受影響"
         if triggered
-        else f"{_display_account(report)} stop-loss {mode}: no affected symbols"
+        else f"{_display_account(report)}止損{_stop_loss_mode_label(mode)}：未發現受影響標的"
     )
     return _portfolio_result(
         rule,
@@ -443,7 +443,7 @@ def _evaluate_concentration(rule: PortfolioRiskAlert, report: Dict[str, Any]) ->
         "total_market_value": concentration.get("total_market_value"),
         "top_weight_pct": observed,
     })
-    message = f"{_display_account(report)} concentration top weight {observed:.2f}%"
+    message = f"{_display_account(report)}集中度最高權重 {observed:.2f}%"
     return _portfolio_result(
         rule,
         triggered=triggered,
@@ -466,7 +466,7 @@ def _evaluate_drawdown(rule: PortfolioRiskAlert, report: Dict[str, Any]) -> Dict
         "max_drawdown_pct": observed,
         "fx_stale": bool(drawdown.get("fx_stale")),
     })
-    message = f"{_display_account(report)} max drawdown {observed:.2f}%"
+    message = f"{_display_account(report)}最大回撤 {observed:.2f}%"
     return _portfolio_result(
         rule,
         triggered=triggered,
@@ -494,9 +494,9 @@ def _evaluate_price_stale(rule: PortfolioRiskAlert, snapshot: Dict[str, Any]) ->
     diagnostics = _base_diagnostics_from_snapshot(snapshot, top_items=affected[:5])
     observed = float(len(affected))
     message = (
-        f"{_display_snapshot_account(snapshot)} stale or missing prices: {len(affected)} symbols"
+        f"{_display_snapshot_account(snapshot)}價格過期或缺失：{len(affected)} 個標的"
         if affected
-        else f"{_display_snapshot_account(snapshot)} prices are current"
+        else f"{_display_snapshot_account(snapshot)}價格為最新"
     )
     return _portfolio_result(
         rule,
@@ -593,14 +593,18 @@ def _threshold(report: Dict[str, Any], name: str) -> Optional[float]:
 
 def _display_account(report: Dict[str, Any]) -> str:
     account_id = report.get("account_id")
-    return "account all" if account_id is None else f"account {account_id}"
+    return "全部帳戶" if account_id is None else f"帳戶 {account_id}"
 
 
 def _display_snapshot_account(snapshot: Dict[str, Any]) -> str:
     accounts = snapshot.get("accounts", []) or []
     if len(accounts) == 1:
-        return f"account {accounts[0].get('account_id')}"
-    return "account all"
+        return f"帳戶 {accounts[0].get('account_id')}"
+    return "全部帳戶"
+
+
+def _stop_loss_mode_label(mode: str) -> str:
+    return "觸發" if mode == "breach" else "接近"
 
 
 def _parse_date(value: Any) -> Optional[datetime]:

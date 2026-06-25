@@ -345,6 +345,18 @@ class AlertApiTestCase(unittest.TestCase):
             self.assertEqual(resp.status_code, 200, resp.text)
             self.assertEqual(resp.json()["target_scope"], body["target_scope"])
 
+        default_name_resp = self.client.post(
+            "/api/v1/alerts/rules",
+            json={
+                "target_scope": "portfolio_account",
+                "target": "all",
+                "alert_type": "portfolio_concentration",
+                "parameters": {},
+            },
+        )
+        self.assertEqual(default_name_resp.status_code, 200, default_name_resp.text)
+        self.assertEqual(default_name_resp.json()["name"], "全部帳戶組合集中度")
+
         invalid_cases = [
             {
                 "target_scope": "watchlist",
