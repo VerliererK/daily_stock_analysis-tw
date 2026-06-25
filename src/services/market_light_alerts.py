@@ -24,6 +24,7 @@ MARKET_REGION_LABELS = {
     "cn": "A股大盘",
     "hk": "港股大盘",
     "us": "美股大盘",
+    "tw": "台股大盘",
 }
 MARKET_LIGHT_DATA_SOURCE = "market_light"
 
