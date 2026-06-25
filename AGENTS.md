@@ -101,9 +101,11 @@ uvicorn server:app --reload --host 0.0.0.0 --port 8000
 pip install -r requirements.txt
 pip install flake8 pytest
 ./scripts/ci_gate.sh
-python -m pytest -m "not network"
+ENV_FILE=/dev/null python -m pytest -m "not network"
 python -m py_compile <changed_python_files>
 ```
+
+本地执行 pytest 时默认加 `ENV_FILE=/dev/null`，避免仓库根目录或开发机上的 `.env` 污染测试结果；只有当测试目标本身是 `.env` 读取、运行时环境覆盖或配置导入导出语义时，才使用测试用临时 `ENV_FILE` 或明确说明未使用该隔离的原因。
 
 ### Web / Desktop
 
@@ -166,6 +168,7 @@ gh run view <run_id> --log-failed
   - 适用范围：`main.py`、`src/`、`data_provider/`、`api/`、`bot/`、`tests/`
   - 优先执行：`./scripts/ci_gate.sh`
   - 最低要求：`python -m py_compile <changed_python_files>`
+  - 本地执行 pytest 默认加 `ENV_FILE=/dev/null`，避免本机 `.env` 影响配置、模型、通知或数据源相关测试；若测试需要验证 `.env` 语义，使用测试内临时 env file。
   - 若影响 API、任务编排、报告生成、通知发送、数据源 fallback、认证、调度，交付说明中要写明是否覆盖了对应路径。
 
 - Web 前端改动：
