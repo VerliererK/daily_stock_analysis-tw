@@ -1691,7 +1691,7 @@ class TestEventMonitorAsync(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(triggered)
         self.assertEqual(triggered.rule.stock_code, "300750")
         self.assertEqual(triggered.current_value, -3.25)
-        self.assertIn("current = -3.25%", triggered.message)
+        self.assertIn("目前 = -3.25%", triggered.message)
         to_thread.assert_awaited_once()
 
     async def test_check_price_change_accepts_dict_payload_alias(self):
@@ -1794,6 +1794,7 @@ class TestEventMonitorConfigIntegration(unittest.TestCase):
         self.assertIsNotNone(monitor)
         monitor._callbacks[0](TriggeredAlert(rule=monitor.rules[0], message="hit"))
         notifier.send.assert_called_once()
+        self.assertIn("事件告警 | 600519", notifier.send.call_args.args[0])
         self.assertIn("hit", notifier.send.call_args.args[0])
         self.assertEqual(notifier.send.call_args.kwargs["route_type"], "alert")
 

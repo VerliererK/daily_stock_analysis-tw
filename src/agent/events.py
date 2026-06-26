@@ -106,6 +106,14 @@ def _read_quote_float(quote: Any, *field_names: str) -> Optional[float]:
     return None
 
 
+def _price_direction_text(direction: str) -> str:
+    return {"above": "突破", "below": "跌破"}.get(direction, direction)
+
+
+def _change_direction_text(direction: str) -> str:
+    return {"up": "上漲", "down": "下跌"}.get(direction, direction)
+
+
 @dataclass
 class AlertRule:
     """Base alert rule definition."""
@@ -128,7 +136,7 @@ class PriceAlert(AlertRule):
 
     def __post_init__(self):
         if not self.description:
-            self.description = f"{self.stock_code} price {self.direction} {self.price}"
+            self.description = f"{self.stock_code} 股價{_price_direction_text(self.direction)} {self.price}"
 
 
 @dataclass
@@ -140,7 +148,9 @@ class PriceChangeAlert(AlertRule):
 
     def __post_init__(self):
         if not self.description:
-            self.description = f"{self.stock_code} change {self.direction} {self.change_pct}%"
+            self.description = (
+                f"{self.stock_code} 漲跌幅{_change_direction_text(self.direction)} {self.change_pct}%"
+            )
 
 
 @dataclass
@@ -151,7 +161,7 @@ class VolumeAlert(AlertRule):
 
     def __post_init__(self):
         if not self.description:
-            self.description = f"{self.stock_code} volume > {self.multiplier}× average"
+            self.description = f"{self.stock_code} 成交量超過 {self.multiplier} 倍均量"
 
 
 @dataclass
@@ -289,8 +299,10 @@ class EventMonitor:
                 return TriggeredAlert(
                     rule=rule,
                     current_value=current_price,
-                    message=f"🔔 {rule.stock_code} price {rule.direction} {rule.price}: "
-                            f"current = {current_price}",
+                    message=(
+                        f"🔔 {rule.stock_code} 股價{_price_direction_text(rule.direction)} "
+                        f"{rule.price}，目前 = {current_price}"
+                    ),
                 )
         except Exception as exc:
             logger.debug("[EventMonitor] _check_price error: %s", exc)
@@ -325,8 +337,10 @@ class EventMonitor:
                 return TriggeredAlert(
                     rule=rule,
                     current_value=current_change_pct,
-                    message=f"🔔 {rule.stock_code} change {direction} {threshold:.2f}%: "
-                            f"current = {current_change_pct:+.2f}%",
+                    message=(
+                        f"🔔 {rule.stock_code} 漲跌幅達到{_change_direction_text(direction)} "
+                        f"{threshold:.2f}%，目前 = {current_change_pct:+.2f}%"
+                    ),
                 )
         except Exception as exc:
             logger.debug("[EventMonitor] _check_price_change error: %s", exc)
@@ -356,8 +370,10 @@ class EventMonitor:
                 return TriggeredAlert(
                     rule=rule,
                     current_value=latest_vol,
-                    message=f"📊 {rule.stock_code} volume spike: "
-                            f"{latest_vol:,.0f} ({latest_vol / avg_vol:.1f}× avg)",
+                    message=(
+                        f"📊 {rule.stock_code} 成交量暴增："
+                        f"{latest_vol:,.0f}（{latest_vol / avg_vol:.1f} 倍均量）"
+                    ),
                 )
         except Exception as exc:
             logger.debug("[EventMonitor] _check_volume error: %s", exc)
@@ -549,8 +565,8 @@ def build_event_monitor_from_config(config=None, notifier=None) -> Optional[Even
     notification_service = notifier or NotificationService()
 
     def _notify(triggered: TriggeredAlert) -> None:
-        title = f"Event Alert | {triggered.rule.stock_code}"
-        content = triggered.message or triggered.rule.description or "Alert triggered"
+        title = f"事件告警 | {triggered.rule.stock_code}"
+        content = triggered.message or triggered.rule.description or "告警已觸發"
         alert_text = NotificationBuilder.build_simple_alert(title=title, content=content, alert_type="warning")
         sent = notification_service.send(alert_text, route_type="alert")
         if not sent:

@@ -23,6 +23,19 @@ ABOVE_BELOW_DIRECTIONS = frozenset({"above", "below"})
 CROSS_DIRECTIONS = frozenset({"bullish_cross", "bearish_cross"})
 MAX_REQUESTED_DAYS = 365
 
+_ABOVE_BELOW_TRIGGER_TEXT = {
+    "above": "突破",
+    "below": "跌破",
+}
+_ABOVE_BELOW_EDGE_TEXT = {
+    "above": "向上穿越",
+    "below": "向下跌破",
+}
+_CROSS_TRIGGER_TEXT = {
+    "bullish_cross": "金叉",
+    "bearish_cross": "死叉",
+}
+
 
 @dataclass
 class TechnicalIndicatorAlert:
@@ -223,10 +236,12 @@ def _evaluate_ma(stock_code: str, params: Dict[str, Any], df: pd.DataFrame) -> I
     prev_delta = prev_close - prev_ma
     curr_delta = curr_close - curr_ma
     triggered = _crossed_zero(prev_delta, curr_delta, direction)
+    trigger_text = _above_below_trigger_text(direction)
+    edge_text = _above_below_edge_text(direction)
     message = (
-        f"{stock_code} close {curr_close:.4f} crossed {direction} MA{window} {curr_ma:.4f}"
+        f"{stock_code} 收盤價 {curr_close:.4f} {trigger_text} MA{window} {curr_ma:.4f}"
         if triggered
-        else f"{stock_code} close {curr_close:.4f} did not edge-cross {direction} MA{window} {curr_ma:.4f}"
+        else f"{stock_code} 收盤價 {curr_close:.4f} 未形成{edge_text} MA{window} {curr_ma:.4f}"
     )
     return IndicatorEvaluation(
         status="triggered" if triggered else "not_triggered",
@@ -248,10 +263,12 @@ def _evaluate_rsi(stock_code: str, params: Dict[str, Any], df: pd.DataFrame) -> 
         return _indicator_unavailable("RSI", latest, threshold=threshold)
 
     triggered = _crossed_threshold(prev_value, curr_value, threshold, direction)
+    trigger_text = _above_below_trigger_text(direction)
+    edge_text = _above_below_edge_text(direction)
     message = (
-        f"{stock_code} RSI{period} {curr_value:.2f} crossed {direction} {threshold:.2f}"
+        f"{stock_code} RSI{period} {curr_value:.2f} {trigger_text} {threshold:.2f}"
         if triggered
-        else f"{stock_code} RSI{period} {curr_value:.2f} did not edge-cross {direction} {threshold:.2f}"
+        else f"{stock_code} RSI{period} {curr_value:.2f} 未形成{edge_text} {threshold:.2f}"
     )
     return IndicatorEvaluation(
         status="triggered" if triggered else "not_triggered",
@@ -278,10 +295,11 @@ def _evaluate_macd(stock_code: str, params: Dict[str, Any], df: pd.DataFrame) ->
         return _indicator_unavailable("MACD", latest, threshold=0.0)
 
     triggered = _crossed_cross_direction(prev_delta, curr_delta, direction)
+    cross_text = _cross_trigger_text(direction)
     message = (
-        f"{stock_code} MACD DIF/DEA {direction}: delta = {curr_delta:.4f}"
+        f"{stock_code} MACD DIF/DEA {cross_text}，差值 = {curr_delta:.4f}"
         if triggered
-        else f"{stock_code} MACD delta {curr_delta:.4f} did not edge-cross {direction}"
+        else f"{stock_code} MACD 差值 {curr_delta:.4f} 未形成{cross_text}"
     )
     return IndicatorEvaluation(
         status="triggered" if triggered else "not_triggered",
@@ -310,10 +328,11 @@ def _evaluate_kdj(stock_code: str, params: Dict[str, Any], df: pd.DataFrame) -> 
         return _indicator_unavailable("KDJ", latest, threshold=0.0)
 
     triggered = _crossed_cross_direction(prev_delta, curr_delta, direction)
+    cross_text = _cross_trigger_text(direction)
     message = (
-        f"{stock_code} KDJ K/D {direction}: delta = {curr_delta:.4f}"
+        f"{stock_code} KDJ K/D {cross_text}，差值 = {curr_delta:.4f}"
         if triggered
-        else f"{stock_code} KDJ delta {curr_delta:.4f} did not edge-cross {direction}"
+        else f"{stock_code} KDJ 差值 {curr_delta:.4f} 未形成{cross_text}"
     )
     return IndicatorEvaluation(
         status="triggered" if triggered else "not_triggered",
@@ -341,10 +360,12 @@ def _evaluate_cci(stock_code: str, params: Dict[str, Any], df: pd.DataFrame) -> 
         return _indicator_unavailable("CCI", latest, threshold=threshold)
 
     triggered = _crossed_threshold(prev_value, curr_value, threshold, direction)
+    trigger_text = _above_below_trigger_text(direction)
+    edge_text = _above_below_edge_text(direction)
     message = (
-        f"{stock_code} CCI{period} {curr_value:.2f} crossed {direction} {threshold:.2f}"
+        f"{stock_code} CCI{period} {curr_value:.2f} {trigger_text} {threshold:.2f}"
         if triggered
-        else f"{stock_code} CCI{period} {curr_value:.2f} did not edge-cross {direction} {threshold:.2f}"
+        else f"{stock_code} CCI{period} {curr_value:.2f} 未形成{edge_text} {threshold:.2f}"
     )
     return IndicatorEvaluation(
         status="triggered" if triggered else "not_triggered",
@@ -370,6 +391,18 @@ def _direction(value: Any, allowed: frozenset[str], *, default: str) -> str:
     if direction not in allowed:
         raise ValueError(f"invalid direction: {direction}")
     return direction
+
+
+def _above_below_trigger_text(direction: str) -> str:
+    return _ABOVE_BELOW_TRIGGER_TEXT.get(direction, direction)
+
+
+def _above_below_edge_text(direction: str) -> str:
+    return _ABOVE_BELOW_EDGE_TEXT.get(direction, direction)
+
+
+def _cross_trigger_text(direction: str) -> str:
+    return _CROSS_TRIGGER_TEXT.get(direction, direction)
 
 
 def _int_in_range(value: Any, field_name: str, *, default: int, minimum: int = 2, maximum: int = 250) -> int:

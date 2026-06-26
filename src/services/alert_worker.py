@@ -479,8 +479,8 @@ class AlertWorker:
         from src.notification import NotificationBuilder, NotificationService
 
         notification_service = self.notifier or NotificationService()
-        title = f"Event Alert | {self._display_target(runtime_rule)}"
-        content = result.get("reason") or result.get("message") or runtime_rule.rule.description or "Alert triggered"
+        title = f"事件告警 | {self._display_target(runtime_rule)}"
+        content = result.get("reason") or result.get("message") or runtime_rule.rule.description or "告警已觸發"
         diagnostics = self._diagnostics_payload(result.get("diagnostics"))
         visibility = diagnostics.get("analysis_visibility") if isinstance(diagnostics.get("analysis_visibility"), dict) else None
         if visibility is None:

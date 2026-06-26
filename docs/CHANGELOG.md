@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [新功能] 大盘复盘支持台股（`MARKET_REVIEW_REGION=tw`，并支持 `tw,us` 等逗号组合与 both）：加权指数/柜买指数/台湾50（Yfinance，NaN 数据自动过滤）、台股市场策略 blueprint（外资动向/电子权值/台币汇率）、台股新闻搜索词与 MarketLight region 扩展。
 - [修复] Web 告警「市场区域」补齐台股(tw)标签与下拉选项（zh/en），修复 MarketRegion 扩展 tw 后 featureText.ts 缺失 tw 键导致的前端 TS 构建报错。
 - [改进] 台股个股新闻搜索改用台湾繁体查询词与台股资讯生态用语（重大訊息/法說會/處置/違約交割），查询使用纯数字代码（2330 而非 TW2330），Brave 搜索 locale 对台股使用 zh-hant/TW，台股代码即使股名为英文也优先中文资讯。
+- [改进] 告警通知标题与触发内容改为繁体中文文案，覆盖即时价、涨跌幅、成交量和日线技术指标告警，避免台股/美股告警推送出现 `crossed below` 等英文句子。
 - [修复] Web 股票代码校验补齐台股格式（`2330.TW` / `6488.TWO` / `TW2330` / 裸 4 位 `2330`），比照后端 `tw_market` 契约；个股分析与单标的告警入口不再把台股代码判为「格式不正确」。
 - [修复] Portfolio 风险告警通知与默认规则名称改为中文文案。
 - [新功能] Web 设置页可选台股：`MARKET_REVIEW_REGION` 增加 `tw`（台股）、`REPORT_LANGUAGE` 增加 `zh-tw`（台湾繁体中文）选项与中英文标签，后端 config registry 同步扩展 options/enum；存档经 reload 即时生效（逗号组合如 `tw,us` 仍维持 env-only）。

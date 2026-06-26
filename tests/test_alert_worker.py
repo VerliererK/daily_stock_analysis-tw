@@ -62,6 +62,7 @@ class AlertIndicatorHelperTestCase(unittest.TestCase):
 
     def test_indicator_edge_cross_and_level_only_semantics(self) -> None:
         ma_params = normalize_indicator_parameters("ma_price_cross", {"window": 2, "direction": "above"})
+        ma_below_params = normalize_indicator_parameters("ma_price_cross", {"window": 2, "direction": "below"})
         triggered = evaluate_indicator_alert(
             "ma_price_cross",
             "TEST",
@@ -80,9 +81,20 @@ class AlertIndicatorHelperTestCase(unittest.TestCase):
                 "close": [10, 12, 13],
             }),
         )
+        below_triggered = evaluate_indicator_alert(
+            "ma_price_cross",
+            "TW0050",
+            ma_below_params,
+            pd.DataFrame({
+                "date": pd.date_range("2026-01-01", periods=3),
+                "close": [10, 12, 9],
+            }),
+        )
 
         self.assertEqual(triggered.status, "triggered")
         self.assertEqual(level_only.status, "not_triggered")
+        self.assertEqual(below_triggered.status, "triggered")
+        self.assertEqual(below_triggered.message, "TW0050 收盤價 9.0000 跌破 MA2 10.5000")
 
     def test_rsi_uses_wilder_not_sma(self) -> None:
         close = pd.Series([10.0, 9.0, 11.0])

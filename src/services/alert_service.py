@@ -81,6 +81,14 @@ NULLABLE_RULE_UPDATE_FIELDS = frozenset({"cooldown_policy", "notification_policy
 logger = logging.getLogger(__name__)
 
 
+def _price_direction_text(direction: str) -> str:
+    return {"above": "突破", "below": "跌破"}.get(direction, direction)
+
+
+def _change_direction_text(direction: str) -> str:
+    return {"up": "上漲", "down": "下跌"}.get(direction, direction)
+
+
 class AlertServiceError(ValueError):
     """Raised when alert service input is invalid."""
 
@@ -357,7 +365,10 @@ class AlertService:
             return self._triggered(
                 rule,
                 current_price,
-                f"{rule.stock_code} price {rule.direction} {rule.price}: current = {current_price}",
+                (
+                    f"{rule.stock_code} 股價 {_price_direction_text(rule.direction)} "
+                    f"{rule.price}，目前 = {current_price}"
+                ),
                 threshold=threshold,
                 data_source="realtime_quote",
                 data_timestamp=self._extract_quote_datetime(quote),
@@ -365,7 +376,10 @@ class AlertService:
         return self._not_triggered(
             rule,
             current_price,
-            f"{rule.stock_code} price {current_price} did not cross {rule.direction} {rule.price}",
+            (
+                f"{rule.stock_code} 股價 {current_price} "
+                f"尚未{_price_direction_text(rule.direction)} {rule.price}"
+            ),
             threshold=threshold,
             data_source="realtime_quote",
             data_timestamp=self._extract_quote_datetime(quote),
@@ -419,7 +433,10 @@ class AlertService:
             return self._triggered(
                 rule,
                 current_change_pct,
-                f"{rule.stock_code} change {direction} {threshold:.2f}%: current = {current_change_pct:+.2f}%",
+                (
+                    f"{rule.stock_code} 漲跌幅達到{_change_direction_text(direction)} "
+                    f"{threshold:.2f}%，目前 = {current_change_pct:+.2f}%"
+                ),
                 threshold=threshold,
                 data_source="realtime_quote",
                 data_timestamp=self._extract_quote_datetime(quote),
@@ -427,7 +444,10 @@ class AlertService:
         return self._not_triggered(
             rule,
             current_change_pct,
-            f"{rule.stock_code} change {current_change_pct:+.2f}% did not cross {direction} {threshold:.2f}%",
+            (
+                f"{rule.stock_code} 漲跌幅 {current_change_pct:+.2f}% "
+                f"尚未達到{_change_direction_text(direction)} {threshold:.2f}%"
+            ),
             threshold=threshold,
             data_source="realtime_quote",
             data_timestamp=self._extract_quote_datetime(quote),
@@ -506,7 +526,7 @@ class AlertService:
             return self._triggered(
                 rule,
                 latest_vol,
-                f"{rule.stock_code} volume spike: {latest_vol:,.0f} ({ratio:.1f}x avg)",
+                f"{rule.stock_code} 成交量暴增：{latest_vol:,.0f}（{ratio:.1f} 倍均量）",
                 threshold=threshold,
                 data_source="daily_data",
                 data_timestamp=data_timestamp,
@@ -514,7 +534,7 @@ class AlertService:
         return self._not_triggered(
             rule,
             latest_vol,
-            f"{rule.stock_code} volume ratio {ratio:.1f}x did not exceed {rule.multiplier}x",
+            f"{rule.stock_code} 成交量為 {ratio:.1f} 倍均量，未超過 {rule.multiplier} 倍",
             threshold=threshold,
             data_source="daily_data",
             data_timestamp=data_timestamp,
