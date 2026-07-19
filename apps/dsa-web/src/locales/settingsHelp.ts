@@ -219,6 +219,14 @@ const settingsHelpZhCN: SettingsHelpMap = {
     impact: ['影响新闻检索覆盖度、时效性和 Agent/报告中的外部信息。'],
     notes: ['搜索服务可能有额度、限流和地区可用性差异。'],
   },
+  'settings.data_source.TAVILY_BASE_URL': {
+    title: 'Tavily API 地址',
+    summary: '配置自建代理或中转的 Tavily API 地址。',
+    usage: '填写完整地址（含协议），如 https://tavily-proxy.example.com；留空使用官方 https://api.tavily.com。',
+    valueNotes: ['仅在配置了 Tavily API Key 时生效。'],
+    impact: ['影响 Tavily 搜索请求的实际访问地址，适用于网络受限或代理场景。'],
+    notes: ['代理端需兼容 Tavily 官方 API 协议。'],
+  },
   'settings.data_source.SEARXNG_BASE_URLS': {
     title: 'SearXNG 实例地址',
     summary: '配置自建或可信 SearXNG 搜索实例。',
@@ -1204,6 +1212,14 @@ const settingsHelpEnUS: SettingsHelpMap = {
     valueNotes: ['Search results enrich news, announcements, and market context.'],
     impact: ['Affects news coverage and external information in reports or Agent flows.'],
     notes: ['Search services can differ in quota, rate limits, and regional availability.'],
+  },
+  'settings.data_source.TAVILY_BASE_URL': {
+    title: 'Tavily Base URL',
+    summary: 'Configures a custom Tavily API endpoint (self-hosted proxy/relay).',
+    usage: 'Use a full URL with scheme, e.g. https://tavily-proxy.example.com; leave empty for the official https://api.tavily.com.',
+    valueNotes: ['Only takes effect when Tavily API keys are configured.'],
+    impact: ['Changes the endpoint used by Tavily search requests, useful behind restricted networks or proxies.'],
+    notes: ['The proxy must be compatible with the official Tavily API protocol.'],
   },
   'settings.data_source.SEARXNG_BASE_URLS': {
     title: 'SearXNG URLs',

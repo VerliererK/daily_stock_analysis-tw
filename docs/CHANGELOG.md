@@ -42,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [改进] Web 设置页大盘复盘市场（`MARKET_REVIEW_REGION`）新增常用多市场组合选项（`cn,hk` / `hk,us` / `tw,us` / `cn,hk,us`），可直接选「台股+美股」等组合而不必选含 A 股的「全部市场」；逗号组合后端早已支持（`_resolve_market_review_regions`），此前 Web 单选下拉仅能选单一市场或 both。registry options/enum 与中英文标签同步扩展。
 - [修复] `REPORT_LANGUAGE=zh-tw` 时大盘复盘报告仍输出简体（个股分析已转繁体、大盘复盘漏接）：在 `_render_market_review_payload_markdown` 出口统一套 OpenCC s2twp 兜底转换，覆盖存档/历史/Web/推送四条出口；zh/en 等其他语言原样返回（幂等）。
 - [新功能] 台股大盘复盘注入「全市场三大法人买卖超」（FinMind `TaiwanStockTotalInstitutionalInvestors`，免 token、无需 data_id）与「美元/台币汇率」（yfinance `USDTWD=X`）到 LLM prompt（外资/投信/自营商/合计，亿元，正为买超），补齐 blueprint 提示却无数据、导致复盘反复声明「缺乏三大法人/汇率资料」的缺口；抓取 fail-soft 回空、其他市场不受影响。
+- [新功能] 新增 `TAVILY_BASE_URL` 配置，支持自定义 Tavily API 地址（自建代理/中转），留空维持官方 `https://api.tavily.com` 不变。
 
 ## [3.21.0] - 2026-06-07
 

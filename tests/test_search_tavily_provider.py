@@ -22,10 +22,12 @@ from src.search_service import SearchService, TavilySearchProvider
 class _FakeTavilyClient:
     response_payload = {"results": []}
     init_api_keys = []
+    init_kwargs = []
     search_calls = []
 
-    def __init__(self, api_key=None, **_kwargs):
+    def __init__(self, api_key=None, **kwargs):
         type(self).init_api_keys.append(api_key)
+        type(self).init_kwargs.append(kwargs)
 
     def search(self, **kwargs):
         type(self).search_calls.append(kwargs)
@@ -35,6 +37,7 @@ class _FakeTavilyClient:
     def reset(cls) -> None:
         cls.response_payload = {"results": []}
         cls.init_api_keys = []
+        cls.init_kwargs = []
         cls.search_calls = []
 
 
@@ -269,6 +272,47 @@ class TestTavilySearchProvider(unittest.TestCase):
         self.assertEqual(_FakeTavilyClient.search_calls[0]["topic"], "news")
         self.assertNotIn("topic", _FakeTavilyClient.search_calls[1])
         self.assertEqual(_FakeTavilyClient.search_calls[2]["topic"], "news")
+
+    def test_provider_passes_custom_base_url_to_client(self) -> None:
+        provider = TavilySearchProvider(
+            ["dummy_key"], base_url="https://tavily-proxy.example.com"
+        )
+
+        with self._patch_tavily({"results": []}):
+            resp = provider.search("BABA stock price", max_results=3)
+
+        self.assertTrue(resp.success)
+        self.assertEqual(len(_FakeTavilyClient.init_kwargs), 1)
+        self.assertEqual(
+            _FakeTavilyClient.init_kwargs[0].get("api_base_url"),
+            "https://tavily-proxy.example.com",
+        )
+
+    def test_provider_omits_base_url_kwarg_when_not_configured(self) -> None:
+        provider = TavilySearchProvider(["dummy_key"])
+
+        with self._patch_tavily({"results": []}):
+            resp = provider.search("BABA stock price", max_results=3)
+
+        self.assertTrue(resp.success)
+        self.assertEqual(len(_FakeTavilyClient.init_kwargs), 1)
+        self.assertNotIn("api_base_url", _FakeTavilyClient.init_kwargs[0])
+
+    def test_search_service_forwards_tavily_base_url_to_provider(self) -> None:
+        with self._patch_tavily({"results": []}):
+            service = SearchService(
+                tavily_keys=["dummy_key"],
+                tavily_base_url="https://tavily-proxy.example.com",
+                searxng_public_instances_enabled=False,
+            )
+            resp = service.search_stock_events("BABA", "阿里巴巴")
+
+        self.assertTrue(resp.success)
+        self.assertEqual(len(_FakeTavilyClient.init_kwargs), 1)
+        self.assertEqual(
+            _FakeTavilyClient.init_kwargs[0].get("api_base_url"),
+            "https://tavily-proxy.example.com",
+        )
 
 
 if __name__ == "__main__":
